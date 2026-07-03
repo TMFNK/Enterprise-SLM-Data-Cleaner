@@ -14,59 +14,47 @@ Design notes
   For the v1 normalize task this doubles as (a) the label generator for
   synthetic data and (b) the ground-truth for eval. The fine-tuned LLM learns
   these rules so it generalizes to messiness the rules don't explicitly cover.
+* Convention as data. The vocabularies, alias maps and field registry live in
+  a YAML spec (conventions/default.yaml). Per-client conventions are a copied,
+  edited YAML file selected via the CONVENTION env var: no code changes.
 * No client data. Every value here is invented.
 
 Pure Python, no model or network required.
 """
 from __future__ import annotations
+import os
 import re
 from datetime import datetime
 
+import yaml
+
 # --------------------------------------------------------------------------- #
-# 1. Controlled vocabularies + alias maps  (canonical value on the right)
+# 1. Controlled vocabularies + alias maps, loaded from the convention spec
+#    (canonical value on the right). Override with CONVENTION=path/to/spec.yaml
 # --------------------------------------------------------------------------- #
-RECORD_TYPES = {"vendor", "customer", "material", "costCenter", "glAccount"}
+_DEFAULT_SPEC = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "conventions", "default.yaml")
+CONVENTION_PATH = os.environ.get("CONVENTION") or _DEFAULT_SPEC
 
-LEGAL_FORMS = {"GmbH", "AG", "SE", "UG", "e.K.", "GmbH & Co. KG", "KG", "OHG",
-               "GbR", "Ltd", "Inc", "S.A.", "B.V.", "S.r.l.", "N.V."}
-LEGAL_FORM_ALIASES = {
-    "gesellschaft mit beschränkter haftung": "GmbH", "mbh": "GmbH", "gmbh.": "GmbH",
-    "aktiengesellschaft": "AG", "ag.": "AG",
-    "unternehmergesellschaft": "UG", "ug (haftungsbeschränkt)": "UG",
-    "limited": "Ltd", "ltd.": "Ltd", "incorporated": "Inc", "inc.": "Inc",
-}
+with open(CONVENTION_PATH, encoding="utf-8") as _fh:
+    _SPEC = yaml.safe_load(_fh)
 
-COUNTRIES = {"DE", "AT", "CH", "FR", "IT", "NL", "BE", "ES", "PL", "GB", "US",
-             "DK", "SE", "NO", "FI", "CZ", "HU"}
-COUNTRY_ALIASES = {
-    "germany": "DE", "deutschland": "DE", "ger": "DE", "de": "DE",
-    "austria": "AT", "österreich": "AT",
-    "switzerland": "CH", "schweiz": "CH",
-    "france": "FR", "frankreich": "FR",
-    "netherlands": "NL", "niederlande": "NL", "holland": "NL",
-    "united kingdom": "GB", "great britain": "GB", "uk": "GB", "england": "GB",
-    "united states": "US", "usa": "US", "u.s.a.": "US",
-}
-
-CURRENCIES = {"EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "CZK", "HUF"}
-CURRENCY_ALIASES = {"€": "EUR", "euro": "EUR", "eur": "EUR",
-                    "$": "USD", "us$": "USD", "dollar": "USD",
-                    "£": "GBP", "chf.": "CHF", "sfr": "CHF"}
-
-UNITS = {"PCE", "KG", "G", "L", "ML", "M", "CM", "M2", "M3", "BOX", "PAL"}
-UNIT_ALIASES = {"pcs": "PCE", "pc": "PCE", "stk": "PCE", "ea": "PCE", "each": "PCE",
-                "kg": "KG", "kilogram": "KG", "g": "G", "gram": "G",
-                "l": "L", "liter": "L", "litre": "L", "ml": "ML",
-                "carton": "BOX", "ctn": "BOX", "pallet": "PAL"}
-
-STATUS = {"active", "inactive", "blocked", "archived"}
-STATUS_ALIASES = {"aktiv": "active", "a": "active", "released": "active",
-                  "freigegeben": "active", "inaktiv": "inactive", "i": "inactive",
-                  "gesperrt": "blocked", "locked": "blocked", "deleted": "archived"}
+RECORD_TYPES = set(_SPEC["record_types"])
+LEGAL_FORMS = set(_SPEC["legal_forms"])
+LEGAL_FORM_ALIASES = dict(_SPEC["legal_form_aliases"])
+COUNTRIES = set(_SPEC["countries"])
+COUNTRY_ALIASES = dict(_SPEC["country_aliases"])
+CURRENCIES = set(_SPEC["currencies"])
+CURRENCY_ALIASES = dict(_SPEC["currency_aliases"])
+UNITS = set(_SPEC["units"])
+UNIT_ALIASES = dict(_SPEC["unit_aliases"])
+STATUS = set(_SPEC["statuses"])
+STATUS_ALIASES = dict(_SPEC["status_aliases"])
 
 # Missing/unknown is encoded ONE way everywhere: JSON null. Never a sentinel.
-EMPTY_STRINGS = {"", " ", "-", "--", "n/a", "N/A", "na", "null", "NULL", "none", "?"}
-NUMERIC_SENTINELS = {-1, -999, 9999}
+EMPTY_STRINGS = set(_SPEC["empty_strings"])
+NUMERIC_SENTINELS = set(_SPEC["numeric_sentinels"])
 
 
 # --------------------------------------------------------------------------- #
@@ -174,33 +162,28 @@ def norm_id(v):
 
 
 # --------------------------------------------------------------------------- #
-# 3. Field registry: friendly field name -> normalizer
+# 3. Field registry: friendly field name -> normalizer, driven by the spec's
+#    `fields:` map (field name -> field type -> normalizer function)
 # --------------------------------------------------------------------------- #
-FIELD_REGISTRY = {
-    "recordId": norm_id,
+_NORMALIZERS_BY_TYPE = {
+    "id": norm_id,
     "recordType": norm_record_type,
-    "name1": clean_text,
-    "name2": clean_text,
+    "text": clean_text,
     "legalForm": norm_legal_form,
-    "street": clean_text,
-    "houseNo": clean_text,
-    "postalCode": clean_text,
-    "city": clean_text,
     "country": norm_country,
-    "region": clean_text,
-    "vatId": norm_vat,
-    "taxNumber": clean_text,
+    "vat": norm_vat,
     "iban": norm_iban,
-    "bic": norm_id,
     "email": norm_email,
     "phone": norm_phone,
     "currency": norm_currency,
-    "baseUnit": norm_unit,
+    "unit": norm_unit,
     "status": norm_status,
-    "validFrom": norm_date,
-    "validTo": norm_date,
+    "date": norm_date,
     "amount": norm_amount,
 }
+
+FIELD_REGISTRY = {name: _NORMALIZERS_BY_TYPE[ftype]
+                  for name, ftype in _SPEC["fields"].items()}
 
 
 def normalize_record(record: dict) -> tuple[dict, list[str]]:

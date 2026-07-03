@@ -1,0 +1,130 @@
+# =============================================================================
+# default.yaml: the house convention as data.
+#
+# This file defines WHAT the cleaner normalizes to: controlled vocabularies,
+# alias maps (messy variant -> canonical value), missing-value encodings, and
+# which field carries which field type. The HOW (parsing dates, amounts,
+# phone numbers...) lives in core/convention_spec.py, keyed by field type.
+#
+# Per-client customization: copy this file (e.g. conventions/acme.yaml), edit
+# the vocabularies and aliases to the client's house standard, and point the
+# pipeline at it:
+#
+#     make data CONVENTION=conventions/acme.yaml
+#
+# No code changes needed. All values below are invented; no client data.
+# =============================================================================
+
+record_types: ["vendor", "customer", "material", "costCenter", "glAccount"]
+
+legal_forms: ["GmbH", "AG", "SE", "UG", "e.K.", "GmbH & Co. KG", "KG", "OHG",
+              "GbR", "Ltd", "Inc", "S.A.", "B.V.", "S.r.l.", "N.V."]
+legal_form_aliases:
+  "gesellschaft mit beschränkter haftung": "GmbH"
+  "mbh": "GmbH"
+  "gmbh.": "GmbH"
+  "aktiengesellschaft": "AG"
+  "ag.": "AG"
+  "unternehmergesellschaft": "UG"
+  "ug (haftungsbeschränkt)": "UG"
+  "limited": "Ltd"
+  "ltd.": "Ltd"
+  "incorporated": "Inc"
+  "inc.": "Inc"
+
+countries: ["DE", "AT", "CH", "FR", "IT", "NL", "BE", "ES", "PL", "GB", "US",
+            "DK", "SE", "NO", "FI", "CZ", "HU"]
+country_aliases:
+  "germany": "DE"
+  "deutschland": "DE"
+  "ger": "DE"
+  "de": "DE"
+  "austria": "AT"
+  "österreich": "AT"
+  "switzerland": "CH"
+  "schweiz": "CH"
+  "france": "FR"
+  "frankreich": "FR"
+  "netherlands": "NL"
+  "niederlande": "NL"
+  "holland": "NL"
+  "united kingdom": "GB"
+  "great britain": "GB"
+  "uk": "GB"
+  "england": "GB"
+  "united states": "US"
+  "usa": "US"
+  "u.s.a.": "US"
+
+currencies: ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "CZK", "HUF"]
+currency_aliases:
+  "€": "EUR"
+  "euro": "EUR"
+  "eur": "EUR"
+  "$": "USD"
+  "us$": "USD"
+  "dollar": "USD"
+  "£": "GBP"
+  "chf.": "CHF"
+  "sfr": "CHF"
+
+units: ["PCE", "KG", "G", "L", "ML", "M", "CM", "M2", "M3", "BOX", "PAL"]
+unit_aliases:
+  "pcs": "PCE"
+  "pc": "PCE"
+  "stk": "PCE"
+  "ea": "PCE"
+  "each": "PCE"
+  "kg": "KG"
+  "kilogram": "KG"
+  "g": "G"
+  "gram": "G"
+  "l": "L"
+  "liter": "L"
+  "litre": "L"
+  "ml": "ML"
+  "carton": "BOX"
+  "ctn": "BOX"
+  "pallet": "PAL"
+
+statuses: ["active", "inactive", "blocked", "archived"]
+status_aliases:
+  "aktiv": "active"
+  "a": "active"
+  "released": "active"
+  "freigegeben": "active"
+  "inaktiv": "inactive"
+  "i": "inactive"
+  "gesperrt": "blocked"
+  "locked": "blocked"
+  "deleted": "archived"
+
+# Missing/unknown is encoded ONE way everywhere: JSON null. Never a sentinel.
+empty_strings: ["", " ", "-", "--", "n/a", "N/A", "na", "null", "NULL", "none", "?"]
+numeric_sentinels: [-1, -999, 9999]
+
+# field name -> field type (the type picks the normalizer in convention_spec.py)
+fields:
+  recordId: "id"
+  recordType: "recordType"
+  name1: "text"
+  name2: "text"
+  legalForm: "legalForm"
+  street: "text"
+  houseNo: "text"
+  postalCode: "text"
+  city: "text"
+  country: "country"
+  region: "text"
+  vatId: "vat"
+  taxNumber: "text"
+  iban: "iban"
+  bic: "id"
+  email: "email"
+  phone: "phone"
+  currency: "currency"
+  baseUnit: "unit"
+  status: "status"
+  validFrom: "date"
+  validTo: "date"
+  amount: "amount"

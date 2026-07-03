@@ -1,5 +1,6 @@
 # runtime + tooling
 requests>=2.31        # talk to the llama.cpp OpenAI-compatible server
+pyyaml>=6.0           # load the convention spec (conventions/*.yaml)
 
 # fine-tuning (Apple Silicon) — install separately if training:
 #   pip install mlx-lm

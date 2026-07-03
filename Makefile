@@ -24,6 +24,7 @@
 #   PORT        local server port
 #   ALIAS       model name the eval/clean scripts look for
 #   LLAMA_CPP   path to a llama.cpp source checkout (only for `make gguf`)
+#   CONVENTION  convention spec file (per-client: conventions/<client>.yaml)
 MODEL      ?= Qwen/Qwen3-0.6B
 GGUF_HF    ?= Qwen/Qwen3-0.6B-GGUF
 GGUF_QUANT ?= Q8_0
@@ -41,6 +42,8 @@ GGUF       ?= $(ALIAS).gguf
 QGGUF      ?= $(ALIAS)-q8_0.gguf
 LLAMA_CPP  ?= ../llama.cpp
 PY         ?= python3
+CONVENTION ?= conventions/default.yaml
+export CONVENTION
 
 .DEFAULT_GOAL := help
 .PHONY: help setup model data sanity baseline-serve baseline train fuse gguf \
