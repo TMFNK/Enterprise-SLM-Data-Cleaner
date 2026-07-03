@@ -9,6 +9,10 @@ No escalation router, no second model. Flow per record:
            --> if invalid: fall back to normalize_record() (the algorithm)
                            or flag needs_review
 
+Every decision is appended to the audit log; flagged records also land in the
+review queue (runtime/audit.py, worked off with runtime/review.py). Model
+confidence below --min-confidence is flagged even when the rule checks pass.
+
 Why an LLM at all if the algorithm exists? The algorithm only covers the rules we
 wrote. The model is there to generalize to messiness the rules DON'T cover
 (novel typos, unseen aliases, fuzzy city/name matches). The algorithm is the
@@ -84,12 +88,18 @@ def _call_model(record: dict) -> dict | None:
         return None
 
 
-def clean_record(record: dict, use_model: bool = True) -> dict:
+def clean_record(record: dict, use_model: bool = True,
+                 min_confidence: float = 0.9) -> dict:
     """Return {result, source, needs_review, violations}."""
     if use_model:
         obj = _call_model(record)
         violations = rule_violations("mdm_record", obj) if obj else ["no valid JSON"]
         if obj and not violations:
+            conf = obj.get("confidence", 1.0)
+            if conf < min_confidence:
+                # Rules pass but the model is unsure: never silently through.
+                return {"result": obj, "source": "model", "needs_review": True,
+                        "violations": [f"confidence {conf} below threshold {min_confidence}"]}
             return {"result": obj, "source": "model", "needs_review": False, "violations": []}
         # Safety net: deterministic algorithm covers the rule-defined fields.
         fixed, _ = normalize_record(record)
@@ -103,14 +113,47 @@ def clean_record(record: dict, use_model: bool = True) -> dict:
 
 
 if __name__ == "__main__":
+    from audit import AuditLog
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true", help="use the served fine-tuned model")
     ap.add_argument("--port", type=int, default=8080,
                     help="port of the llama.cpp server (match make serve PORT=...)")
+    ap.add_argument("--batch", help="clean a JSONL file of records (one JSON object per line)")
+    ap.add_argument("--out", help="write cleaned records to this JSONL file (with --batch)")
+    ap.add_argument("--audit-dir", default="audit",
+                    help="where the append-only audit log + review queue live")
+    ap.add_argument("--min-confidence", type=float, default=0.9,
+                    help="model confidence below this goes to manual review")
+    ap.add_argument("--model-file", help="path to the served GGUF, to hash into the audit log")
     args = ap.parse_args()
     MODEL_URL = f"http://localhost:{args.port}/v1/chat/completions"
     if args.live:
         require_server(args.port)
+
+    log = AuditLog(args.audit_dir, model=MODEL_NAME if args.live else "algorithm",
+                   model_file=args.model_file)
+
+    if args.batch:
+        records = [json.loads(l) for l in open(args.batch, encoding="utf-8")]
+        flagged, cleaned = 0, []
+        for rec in records:
+            out = clean_record(rec, use_model=args.live,
+                               min_confidence=args.min_confidence)
+            log.record(rec, out)
+            flagged += int(out["needs_review"])
+            cleaned.append(out["result"])
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as fh:
+                for c in cleaned:
+                    fh.write(json.dumps(c, ensure_ascii=False) + "\n")
+        print(f"cleaned {len(records)} records: {len(records) - flagged} ok, "
+              f"{flagged} -> review queue")
+        print(f"audit log: {log.log_path}"
+              + (f", output: {args.out}" if args.out else ""))
+        if flagged:
+            print("work off the queue with: python runtime/review.py list")
+        sys.exit(0)
 
     demo = {"recordId": "v-1001", "recordType": "vendor", "name1": "  Muster  Handels ",
             "legalForm": "mbH", "city": "München ", "country": "Germany",
@@ -118,7 +161,8 @@ if __name__ == "__main__":
             "currency": "€", "baseUnit": "pcs", "status": "aktiv",
             "validFrom": "01.03.2024", "amount": "1.234,56"}
 
-    out = clean_record(demo, use_model=args.live)
+    out = clean_record(demo, use_model=args.live, min_confidence=args.min_confidence)
+    log.record(demo, out)
     print(f"source={out['source']} needs_review={out['needs_review']}")
     if out["violations"]:
         print("model violations:", out["violations"])

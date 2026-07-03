@@ -47,7 +47,7 @@ export CONVENTION
 
 .DEFAULT_GOAL := help
 .PHONY: help setup model data sanity baseline-serve baseline train fuse gguf \
-        serve eval demo all clean distclean
+        serve eval demo review all clean distclean
 
 help:  ## show this list of commands
 	@echo "Enterprise SLM Data Cleaner: commands (run them in this order):"
@@ -126,6 +126,9 @@ eval:  ## STEP 9b: score your fine-tuned model (compare to the baseline)
 
 demo:  ## STEP 10: clean one messy record with your model
 	$(PY) runtime/clean.py --live --port $(PORT)
+
+review:  ## list records waiting for manual review (audit/review-queue.jsonl)
+	$(PY) runtime/review.py list
 
 all: data sanity train fuse gguf  ## do steps 5, 7 and 8 in one go (no serving)
 	@echo ">> Built $(QGGUF). Now run 'make serve', then 'make eval' in a 2nd terminal."

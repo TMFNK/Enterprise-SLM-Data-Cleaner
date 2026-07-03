@@ -1,5 +1,6 @@
 # generated data + training artifacts
 data/*.jsonl
+audit/
 adapters/
 fused/
 *.gguf
