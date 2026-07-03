@@ -1,0 +1,36 @@
+# =============================================================================
+# Containerfile: air-gapped serving image for the Enterprise SLM Data Cleaner.
+#
+# Posture: BUILD in a trusted, connected environment; RUN with no network at
+# all (`--network none`). The image bundles llama.cpp's server, the cleaner
+# runtime, and the vendored model weights. Nothing is downloaded at runtime;
+# the entrypoint refuses to serve weights that don't match the pinned
+# manifest (models/MANIFEST.sha256, committed to git).
+#
+# Before building:  make gguf && make pin-model   (puts the weights + pinned
+# hashes in models/). Build from the repo root:
+#
+#     docker build -f deploy/Containerfile -t enterprise-slm-cleaner .
+#
+# See deploy/README.md for run examples and the air-gap verification steps.
+# =============================================================================
+FROM ghcr.io/ggml-org/llama.cpp:server
+
+# python for the cleaner runtime; deps via apt so the build needs no pip index
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-requests python3-yaml \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/cleaner
+COPY core/ core/
+COPY conventions/ conventions/
+COPY runtime/ runtime/
+COPY models/ models/
+COPY deploy/entrypoint.sh /usr/local/bin/cleaner-entrypoint
+RUN chmod +x /usr/local/bin/cleaner-entrypoint
+
+# audit log + review queue land under /data (mount a volume there)
+VOLUME /data
+
+ENTRYPOINT ["/usr/local/bin/cleaner-entrypoint"]
+CMD ["serve"]

@@ -44,10 +44,11 @@ LLAMA_CPP  ?= ../llama.cpp
 PY         ?= python3
 CONVENTION ?= conventions/default.yaml
 export CONVENTION
+MODELS_DIR ?= models
 
 .DEFAULT_GOAL := help
 .PHONY: help setup model data sanity baseline-serve baseline train fuse gguf \
-        serve eval demo review all clean distclean
+        serve eval demo review pin-model verify-model all clean distclean
 
 help:  ## show this list of commands
 	@echo "Enterprise SLM Data Cleaner: commands (run them in this order):"
@@ -129,6 +130,17 @@ demo:  ## STEP 10: clean one messy record with your model
 
 review:  ## list records waiting for manual review (audit/review-queue.jsonl)
 	$(PY) runtime/review.py list
+
+pin-model:  ## vendor the trained GGUF into models/ and pin its sha256 (after make gguf)
+	@mkdir -p $(MODELS_DIR)
+	@if [ -f $(QGGUF) ]; then cp -f $(QGGUF) $(MODELS_DIR)/; fi
+	@ls $(MODELS_DIR)/*.gguf >/dev/null 2>&1 \
+	  || { echo "!! no .gguf in $(MODELS_DIR)/ and no $(QGGUF) here. Run 'make gguf' first."; exit 1; }
+	@cd $(MODELS_DIR) && shasum -a 256 *.gguf > MANIFEST.sha256 && cat MANIFEST.sha256
+	@echo ">> Pinned. Commit $(MODELS_DIR)/MANIFEST.sha256 (weights stay gitignored)."
+
+verify-model:  ## check vendored weights in models/ against the pinned manifest
+	@cd $(MODELS_DIR) && shasum -a 256 -c MANIFEST.sha256
 
 all: data sanity train fuse gguf  ## do steps 5, 7 and 8 in one go (no serving)
 	@echo ">> Built $(QGGUF). Now run 'make serve', then 'make eval' in a 2nd terminal."
