@@ -1,0 +1,25 @@
+# Eval gate: no change to the convention, core algorithm, or generator lands
+# if it breaks documented behavior. Two layers:
+#   1. eval/adversarial.py has PINNED expected values; any regression fails
+#      the build at generation time with a named case.
+#   2. The synthetic test split and the adversarial suite must both score
+#      100% field accuracy in algorithm mode.
+# Model-quality gating (live eval vs. a served fine-tune) runs locally via
+# `make eval-adversarial` — CI has no GPU and the weights are not in git.
+name: eval-gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: make eval-gate N=500

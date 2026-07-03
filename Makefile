@@ -47,7 +47,8 @@ export CONVENTION
 MODELS_DIR ?= models
 
 .DEFAULT_GOAL := help
-.PHONY: help setup model data sanity baseline-serve baseline train fuse gguf \
+.PHONY: help setup model data sanity adversarial eval-gate eval-adversarial \
+        baseline-serve baseline train fuse gguf \
         serve eval demo review pin-model verify-model all clean distclean
 
 help:  ## show this list of commands
@@ -83,6 +84,18 @@ sanity:  ## STEP 5b: check the data is correct (should say 100%)
 	@echo ">> Checking the held-out test split against the rule-based algorithm..."
 	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm
 	@echo ">> If the numbers are ~100%, the data is good. Next: make baseline-serve"
+
+adversarial:  ## build the pinned adversarial eval suite (fails loudly on regressions)
+	$(PY) eval/adversarial.py --out $(DATA)/adversarial.jsonl
+
+eval-gate: data adversarial  ## CI gate: sanity + adversarial suites must score 100%
+	$(PY) core/convention_spec.py
+	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm --min-score 100
+	$(PY) eval/evaluate.py --data $(DATA)/adversarial.jsonl --algorithm --min-score 100
+	@echo ">> Eval gate passed."
+
+eval-adversarial:  ## score the served model on the adversarial suite (per category)
+	$(PY) eval/evaluate.py --data $(DATA)/adversarial.jsonl --live --port $(PORT)
 
 # --- STEP 6: measure the model BEFORE training (the 'before' number) ------- #
 baseline-serve:  ## STEP 6a: serve the STOCK model (downloads it fresh), keep running

@@ -104,6 +104,8 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--port", type=int, default=8080,
                     help="port of the llama.cpp server (match make serve PORT=...)")
+    ap.add_argument("--min-score", type=float, default=None,
+                    help="exit non-zero if field accuracy (%%) is below this (the eval gate)")
     args = ap.parse_args()
     global MODEL_URL
     MODEL_URL = f"http://localhost:{args.port}/v1/chat/completions"
@@ -117,12 +119,14 @@ def main():
 
     valid_json = exact = 0
     field_hits = field_total = 0
+    by_cat: dict[str, list[int]] = {}   # category -> [hits, total]
     compared_fields = set(spec.FIELD_REGISTRY)  # ignore confidence/changes
 
     for ex in rows:
         msgs = {m["role"]: m["content"] for m in ex["messages"]}
         messy = json.loads(msgs["user"])
         gold = json.loads(msgs["assistant"])
+        cat = ex.get("category")
         pred = predict(messy)
         if pred is None:
             continue
@@ -131,18 +135,28 @@ def main():
         for f in compared_fields:
             if f in gold:
                 field_total += 1
-                if _eq(pred.get(f), gold.get(f)):
-                    field_hits += 1
-                else:
+                hit = _eq(pred.get(f), gold.get(f))
+                field_hits += int(hit)
+                if cat:
+                    by_cat.setdefault(cat, [0, 0])
+                    by_cat[cat][0] += int(hit)
+                    by_cat[cat][1] += 1
+                if not hit:
                     rec_ok = False
         exact += int(rec_ok)
 
     n = len(rows)
+    score = 100.0 * field_hits / max(field_total, 1)
     print(f"mode           : {'live model' if args.live else 'algorithm (sanity)'}")
     print(f"examples       : {n}")
     print(f"valid JSON     : {valid_json/n:6.1%}")
     print(f"exact record   : {exact/n:6.1%}")
     print(f"field accuracy : {field_hits/max(field_total,1):6.1%}  ({field_hits}/{field_total})")
+    for cat, (hits, total) in sorted(by_cat.items()):
+        print(f"  {cat:13s}: {hits/max(total,1):6.1%}  ({hits}/{total})")
+    if args.min_score is not None and score < args.min_score:
+        print(f"EVAL GATE FAILED: field accuracy {score:.1f}% < required {args.min_score:.1f}%")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
