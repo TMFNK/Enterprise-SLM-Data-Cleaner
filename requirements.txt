@@ -1,0 +1,6 @@
+# runtime + tooling
+requests>=2.31        # talk to the llama.cpp OpenAI-compatible server
+
+# fine-tuning (Apple Silicon) — install separately if training:
+#   pip install mlx-lm
+# inference: build or `brew install llama.cpp`

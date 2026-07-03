@@ -1,0 +1,6 @@
+# generated data + training artifacts
+data/*.jsonl
+adapters/
+fused/
+*.gguf
+__pycache__/
