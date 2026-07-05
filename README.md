@@ -50,9 +50,10 @@ sondern der Grundhaltung. Dieses Projekt zeigt den anderen Weg:
   Konventionsversion und mit welchem Modellstand. Unsichere Fälle gehen in
   eine manuelle Prüfschlange, nie stillschweigend durch.
 - **Das Basismodell ist austauschbar.** Wer kein chinesisches Modell einsetzen
-  möchte, wählt ein europäisches (z. B. Teuken-7B von Fraunhofer, gefördert
-  vom BMWK, oder EuroLLM aus einem EU-Projekt) oder ein US-Modell mit
-  MIT-Lizenz. Details in der Tabelle unten.
+  möchte, wählt ein europäisches (z. B. Ministral-8B oder Mistral Nemo von
+  Mistral AI in Frankreich, Teuken-7B von Fraunhofer, gefördert vom BMWK, oder
+  EuroLLM aus einem EU-Projekt) oder ein US-Modell mit MIT-Lizenz. Details in
+  der Tabelle unten.
 
 Beratung und Umsetzung: [mbitai.com](https://www.mbitai.com).
 
@@ -135,24 +136,41 @@ training data is already generated) and re-running the same eval gate.
 | [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B)                                      | 0.6B | Alibaba (CN)                    | Apache-2.0  | Demo default: smallest, fastest, runs on 8 GB laptops                                                                       |
 | [Teuken-7B-instruct](https://huggingface.co/openGPT-X/Teuken-7B-instruct-commercial-v0.4) | 7B   | **Fraunhofer / OpenGPT-X (DE)** | Apache-2.0  | German-made, BMWK-funded, all 24 EU languages. Nice sovereignty pick, but needs a bigger training machine (≥32 GB or a GPU) |
 | [EuroLLM-1.7B](https://huggingface.co/utter-project/EuroLLM-1.7B-Instruct)                | 1.7B | **EU project**                  | Apache-2.0  | European, all official EU languages, still small footprint                                                                  |
+| [Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410) | 8B   | **Mistral AI (FR)**             | Apache-2.0  | French-made edge model; LoRA-trains on a 16 GB Mac (~4.5 GB at 4-bit). Multilingual incl. DE. Strong EU pick when 0.6B is too small but Teuken is too heavy |
+| [Mistral Nemo Instruct](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407)      | 12B  | **Mistral AI (FR)**             | Apache-2.0  | Mistral+NVIDIA collab; better instruct quality than the 7–8B class. Plan for ≥16 GB RAM at 4-bit (~7 GB weights)            |
 | [Phi-4-mini](https://huggingface.co/microsoft/Phi-4-mini-instruct)                        | 3.8B | Microsoft (US)                  | MIT         | Most permissive license of the field; strong quality, mid-sized                                                             |
 | [Gemma 3 1B](https://huggingface.co/google/gemma-3-1b-it)                                 | 1B   | Google (US)                     | Gemma Terms | Capable, but _not_ pure open source: Google's terms attach a use policy                                                     |
 | [SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B)                             | 3B   | Hugging Face (US/FR)            | Apache-2.0  | Fully documented training recipe, strong transparency story                                                                 |
 
-Practical recommendation for EU customers: try **EuroLLM-1.7B**
-as the default (European, Apache-2.0, small footprint)
-or **Teuken-7B** where _made in Germany_ carries weight and a training
-machine is available. Alternatively, use Phi-4-mini as the quality/license fallback.
+Practical recommendation for EU customers:
+
+- **EuroLLM-1.7B** — smallest European footprint; still fits the 8 GB demo laptop.
+- **Ministral-8B-Instruct-2410** — the sweet spot for _made in the EU_ without a
+  server room: French company, Apache-2.0, trains on an ordinary 16 GB Mac, and
+  enough capacity for messy German master-data edge cases that a 0.6B model
+  struggles with.
+- **Mistral Nemo 12B** — same sovereignty story with more headroom; pick it when
+  you have ≥16 GB RAM and want better zero-shot quality before fine-tuning.
+- **Teuken-7B** — where _made in Germany_ carries the most weight and a bigger
+  training machine (≥32 GB or a GPU) is available.
+
+Phi-4-mini remains the US quality/license fallback if procurement rules out
+European weights entirely.
 
 To swap, override the model variables and rerun the pipeline, then the gate:
 
 ```bash
 make model train fuse gguf MODEL=utter-project/EuroLLM-1.7B-Instruct
 make eval          # same test set, same bar, different base model
+
+# EU laptop-friendly pick:
+make model train fuse gguf MODEL=mistralai/Ministral-8B-Instruct-2410
+make eval
 ```
 
 (One caveat: each architecture must be supported by the MLX
-trainer and llama.cpp! I chose Qwen, Gemma, Phi, Llama-family and SmolLM, because they are supported.)
+trainer and llama.cpp! Qwen, Gemma, Phi, Llama-family, SmolLM, and Mistral
+(including Ministral and Nemo) are all supported today.)
 
 ---
 
