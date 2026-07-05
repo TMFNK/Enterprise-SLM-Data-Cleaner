@@ -5,5 +5,5 @@ adapters/
 fused/
 *.gguf
 __pycache__/
-.cursor
-
+.cursor/
+.cursor/hooks/state
