@@ -144,14 +144,14 @@ training data is already generated) and re-running the same eval gate.
 
 Practical recommendation for EU customers:
 
-- **EuroLLM-1.7B** — smallest European footprint; still fits the 8 GB demo laptop.
-- **Ministral-8B-Instruct-2410** — the sweet spot for _made in the EU_ without a
+- **EuroLLM-1.7B**: smallest European footprint; still fits the 8 GB demo laptop.
+- **Ministral-8B-Instruct-2410**: the sweet spot for _made in the EU_ without a
   server room: French company, Apache-2.0, trains on an ordinary 16 GB Mac, and
   enough capacity for messy German master-data edge cases that a 0.6B model
   struggles with.
-- **Mistral Nemo 12B** — same sovereignty story with more headroom; pick it when
+- **Mistral Nemo 12B**: same sovereignty story with more headroom; pick it when
   you have ≥16 GB RAM and want better zero-shot quality before fine-tuning.
-- **Teuken-7B** — where _made in Germany_ carries the most weight and a bigger
+- **Teuken-7B**: where _made in Germany_ carries the most weight and a bigger
   training machine (≥32 GB or a GPU) is available.
 
 Phi-4-mini remains the US quality/license fallback if procurement rules out
