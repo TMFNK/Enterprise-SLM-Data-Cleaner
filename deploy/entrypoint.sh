@@ -45,7 +45,7 @@ cd "$APP"
 case "$MODE" in
     batch)
         IN="${2:?usage: batch <in.jsonl> [out.jsonl]}"
-        python3 runtime/clean.py --live --port "$PORT" \
+        python3 runtime/clean.py --live --port "$PORT" --model-name "$ALIAS" \
             --batch "$IN" ${3:+--out "$3"} \
             --audit-dir /data/audit --model-file "$MODEL_FILE"
         ;;

@@ -31,7 +31,6 @@ except ImportError:
     requests = None
 
 MODEL_URL = "http://localhost:8080/v1/chat/completions"  # port set via --port
-MODEL_NAME = "qwen3-0.6b-cleaner"
 
 _SERVER_HINT = """
 Cannot reach the model server at http://localhost:{port}.
@@ -76,11 +75,11 @@ def predict_algorithm(messy: dict) -> dict:
     return target
 
 
-def predict_live(messy: dict) -> dict | None:
+def predict_live(messy: dict, model_name: str = "qwen3-0.6b-cleaner") -> dict | None:
     if requests is None:
         raise RuntimeError("`requests` needed for --live")
     payload = {
-        "model": MODEL_NAME, "temperature": 0,
+        "model": model_name, "temperature": 0,
         "messages": [
             {"role": "system", "content": spec.system_prompt("mdm_record")},
             {"role": "user", "content": json.dumps(messy, ensure_ascii=False)},
@@ -104,12 +103,17 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--port", type=int, default=8080,
                     help="port of the llama.cpp server (match make serve PORT=...)")
+    ap.add_argument("--model-name", default="qwen3-0.6b-cleaner",
+                    help="model name sent to llama.cpp (match make ALIAS=...)")
     ap.add_argument("--min-score", type=float, default=None,
                     help="exit non-zero if field accuracy (%%) is below this (the eval gate)")
     args = ap.parse_args()
     global MODEL_URL
     MODEL_URL = f"http://localhost:{args.port}/v1/chat/completions"
-    predict = predict_live if args.live else predict_algorithm
+    if args.live:
+        predict = lambda m: predict_live(m, model_name=args.model_name)
+    else:
+        predict = predict_algorithm
     if args.live:
         require_server(args.port)
 

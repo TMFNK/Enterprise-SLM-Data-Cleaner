@@ -157,20 +157,42 @@ Practical recommendation for EU customers:
 Phi-4-mini remains the US quality/license fallback if procurement rules out
 European weights entirely.
 
-To swap, override the model variables and rerun the pipeline, then the gate:
+To swap, rerun the pipeline with a different `MODEL_PRESET`. Run `make clean`
+first so adapters and GGUF files from the previous model are not reused:
 
 ```bash
-make model train fuse gguf MODEL=utter-project/EuroLLM-1.7B-Instruct
-make eval          # same test set, same bar, different base model
+make list-models        # show available model presets
+make MODEL_PRESET=minicpm5-1b clean model data train fuse gguf serve eval
 
-# EU laptop-friendly pick:
-make model train fuse gguf MODEL=mistralai/Ministral-8B-Instruct-2410
-make eval
+# All pipeline commands after switch respect the preset:
+make MODEL_PRESET=minicpm5-1b train    # re-run training only
+make MODEL_PRESET=minicpm5-1b eval     # re-run evaluation
+```
+
+Or set it once for the session:
+
+```bash
+export MODEL_PRESET=minicpm5-1b
+make clean model data train fuse gguf serve eval
+```
+
+Available presets:
+
+| Preset            | Base model                                                                                | Size | GGUF repo (baseline)                               | Quant   | ALIAS                |
+| ----------------- | ----------------------------------------------------------------------------------------- | ---- | -------------------------------------------------- | ------- | -------------------- |
+| `qwen3-0.6b`      | [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B)                                      | 0.6B | `Qwen/Qwen3-0.6B-GGUF`                             | `Q8_0`  | `qwen3-0.6b-cleaner` |
+| `qwen3.5-0.8b`    | [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B)                                  | 0.8B | `unsloth/Qwen3.5-0.8B-GGUF` (community; no official Qwen GGUF yet) | `Q8_0`  | `qwen3.5-0.8b-cleaner` |
+| `minicpm5-1b`     | [MiniCPM5-1B](https://huggingface.co/openbmb/MiniCPM5-1B)                                 | 1B   | `openbmb/MiniCPM5-1B-GGUF`                          | `Q4_K_M`| `minicpm5-1b-cleaner` |
+
+Each preset sets four variables together. You can still override any individually:
+
+```bash
+make model train fuse gguf MODEL_PRESET=minicpm5-1b GGUF_QUANT=Q8_0
 ```
 
 (One caveat: each architecture must be supported by the MLX
-trainer and llama.cpp! Qwen, Gemma, Phi, Llama-family, SmolLM, and Mistral
-(including Ministral and Nemo) are all supported today.)
+trainer and llama.cpp! Qwen, Gemma, Phi, Llama-family, SmolLM, MiniCPM, and
+Mistral (including Ministral and Nemo) are all supported today.)
 
 ---
 

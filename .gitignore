@@ -7,3 +7,4 @@ fused/
 __pycache__/
 .cursor/
 .cursor/hooks/state
+.DS_Store

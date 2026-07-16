@@ -1,6 +1,8 @@
-# Training: Qwen3-0.6B (instruct) with Apple MLX
+# Training with Apple MLX
 
-Fine-tune locally on Apple Silicon, then export to GGUF for llama.cpp.
+Fine-tune locally on Apple Silicon, then export to GGUF for llama.cpp. The Makefile
+sets `MODEL`, `ALIAS`, and `GGUF_QUANT` from `MODEL_PRESET` (default:
+`qwen3-0.6b`). Run `make list-models` for options.
 
 ## 0. Install
 
@@ -24,8 +26,10 @@ train on increasing slices and stop where eval flattens.
 ## 2. LoRA fine-tune
 
 ```bash
+make train
+# or manually:
 mlx_lm.lora \
-  --model Qwen/Qwen3-0.6B \
+  --model "$MODEL" \
   --train \
   --data ./data \
   --iters 1000 \
@@ -41,9 +45,11 @@ thinking template.
 ## 3. Fuse + convert to GGUF
 
 ```bash
-mlx_lm.fuse --model Qwen/Qwen3-0.6B --adapter-path adapters --save-path fused
-python /path/to/llama.cpp/convert_hf_to_gguf.py fused --outfile qwen3-0.6b-cleaner.gguf
-llama-quantize qwen3-0.6b-cleaner.gguf qwen3-0.6b-cleaner-q8_0.gguf Q8_0
+make fuse gguf
+# or manually (replace ALIAS / GGUF_QUANT with your MODEL_PRESET values):
+mlx_lm.fuse --model "$MODEL" --adapter-path adapters --save-path fused
+python /path/to/llama.cpp/convert_hf_to_gguf.py fused --outfile "${ALIAS}.gguf"
+llama-quantize "${ALIAS}.gguf" "${ALIAS}-q8_0.gguf" Q8_0
 ```
 
 (For a 0.6B model use a high-bit quant: Q8_0 / Q6_K: the RAM cost is tiny and
@@ -52,13 +58,15 @@ JSON fidelity is better.)
 ## 4. Serve
 
 ```bash
-llama-server -m qwen3-0.6b-cleaner-q8_0.gguf --port 8080 --alias qwen3-0.6b-cleaner
+make serve
+# or manually:
+llama-server -m "${ALIAS}-q8_0.gguf" --port 8080 --alias "${ALIAS}"
 ```
 
 ## 5. Evaluate the before/after
 
 ```bash
 # baseline: stock instruct model on :8080 (no adapter): establishes zero-shot
-python eval/evaluate.py --data data/test.jsonl --live
+python eval/evaluate.py --data data/test.jsonl --live --model-name "${ALIAS}"
 # then swap in the fine-tuned GGUF at the same port and re-run to see the lift
 ```

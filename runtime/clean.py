@@ -39,7 +39,6 @@ except ImportError:
     requests = None
 
 MODEL_URL = "http://localhost:8080/v1/chat/completions"   # port set via --port
-MODEL_NAME = "qwen3-0.6b-cleaner"
 
 _SERVER_HINT = """
 Cannot reach the model server at http://localhost:{port}.
@@ -64,11 +63,11 @@ def require_server(port: int):
         sys.exit(_SERVER_HINT.format(port=port))
 
 
-def _call_model(record: dict) -> dict | None:
+def _call_model(record: dict, model_name: str = "qwen3-0.6b-cleaner") -> dict | None:
     if requests is None:
         raise RuntimeError("`requests` not installed; --live needs it")
     payload = {
-        "model": MODEL_NAME,
+        "model": model_name,
         "messages": [
             {"role": "system", "content": spec.system_prompt("mdm_record")},
             {"role": "user", "content": json.dumps(record, ensure_ascii=False)},
@@ -89,10 +88,11 @@ def _call_model(record: dict) -> dict | None:
 
 
 def clean_record(record: dict, use_model: bool = True,
-                 min_confidence: float = 0.9) -> dict:
+                 min_confidence: float = 0.9,
+                 model_name: str = "qwen3-0.6b-cleaner") -> dict:
     """Return {result, source, needs_review, violations}."""
     if use_model:
-        obj = _call_model(record)
+        obj = _call_model(record, model_name=model_name)
         violations = rule_violations("mdm_record", obj) if obj else ["no valid JSON"]
         if obj and not violations:
             conf = obj.get("confidence", 1.0)
@@ -119,6 +119,8 @@ if __name__ == "__main__":
     ap.add_argument("--live", action="store_true", help="use the served fine-tuned model")
     ap.add_argument("--port", type=int, default=8080,
                     help="port of the llama.cpp server (match make serve PORT=...)")
+    ap.add_argument("--model-name", default="qwen3-0.6b-cleaner",
+                    help="model name sent to llama.cpp (match make ALIAS=...)")
     ap.add_argument("--batch", help="clean a JSONL file of records (one JSON object per line)")
     ap.add_argument("--out", help="write cleaned records to this JSONL file (with --batch)")
     ap.add_argument("--audit-dir", default="audit",
@@ -131,7 +133,7 @@ if __name__ == "__main__":
     if args.live:
         require_server(args.port)
 
-    log = AuditLog(args.audit_dir, model=MODEL_NAME if args.live else "algorithm",
+    log = AuditLog(args.audit_dir, model=args.model_name if args.live else "algorithm",
                    model_file=args.model_file)
 
     if args.batch:
@@ -139,7 +141,8 @@ if __name__ == "__main__":
         flagged, cleaned = 0, []
         for rec in records:
             out = clean_record(rec, use_model=args.live,
-                               min_confidence=args.min_confidence)
+                               min_confidence=args.min_confidence,
+                               model_name=args.model_name)
             log.record(rec, out)
             flagged += int(out["needs_review"])
             cleaned.append(out["result"])
@@ -161,7 +164,8 @@ if __name__ == "__main__":
             "currency": "€", "baseUnit": "pcs", "status": "aktiv",
             "validFrom": "01.03.2024", "amount": "1.234,56"}
 
-    out = clean_record(demo, use_model=args.live, min_confidence=args.min_confidence)
+    out = clean_record(demo, use_model=args.live, min_confidence=args.min_confidence,
+                       model_name=args.model_name)
     log.record(demo, out)
     print(f"source={out['source']} needs_review={out['needs_review']}")
     if out["violations"]:
