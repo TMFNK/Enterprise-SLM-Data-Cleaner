@@ -73,7 +73,7 @@ export CONVENTION
 MODELS_DIR ?= models
 
 .DEFAULT_GOAL := help
-.PHONY: help list-models setup model data sanity adversarial eval-gate eval-adversarial \
+.PHONY: help list-models setup model data sanity adversarial embed eval-gate eval-adversarial \
         baseline-serve baseline train fuse gguf \
         serve eval demo review pin-model verify-model all clean distclean
 
@@ -128,6 +128,18 @@ sanity:  ## STEP 5b: check the data is correct (should say 100%)
 
 adversarial:  ## build the pinned adversarial eval suite (fails loudly on regressions)
 	$(PY) eval/adversarial.py --out $(DATA)/adversarial.jsonl
+
+embed:  ## pre-compute embeddings + cache bge-m3 (optional, for USE_EMBEDDINGS=1)
+	USE_EMBEDDINGS=1 PYTHONPATH=core $(PY) -c "\
+import sentence_transformers; \
+from convention_spec import normalize_record; \
+assert normalize_record({'country': 'BRD'})[0]['country'] == 'DE'; \
+assert normalize_record({'country': 'Nederlands'})[0]['country'] == 'NL'; \
+assert normalize_record({'country': 'Bavaria'})[0]['country'] == 'Bavaria', \
+    'region must not map to a country'; \
+assert normalize_record({'country': 'Atlantis'})[0]['country'] == 'Atlantis'; \
+assert normalize_record({'legalForm': 'GmbbH'})[0]['legalForm'] == 'GmbbH'; \
+print('bge-m3 cached and ready')"
 
 eval-gate: data adversarial  ## CI gate: sanity + adversarial suites must score 100%
 	$(PY) core/convention_spec.py

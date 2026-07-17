@@ -61,13 +61,13 @@ Beratung und Umsetzung: [mbitai.com](https://www.mbitai.com).
 
 ## How it works, step by step (no ML knowledge required)
 
-1. **The rulebook.** Your data standard (allowed country codes, legal forms,
+1. **The rules.** Your data standard (allowed country codes, legal forms,
    date formats, how missing values are written) lives in one readable file
    client-specific: [conventions/default.yaml](conventions/default.yaml). A data
    steward can open and edit it; no programming involved. Switching clients
    means switching files, not rewriting software.
 
-2. **Practice data, invented from the rulebook.** The system generates
+2. **Practice data, invented from the rules.** The system generates
    thousands of fake records (invented company names, invented IBANs), makes
    them dirty in realistic ways, and computes the correct cleaned version
    from the rulebook. No real data is used at any point, which is why the
@@ -109,6 +109,98 @@ Beratung und Umsetzung: [mbitai.com](https://www.mbitai.com).
    misread as a German one?). Continuous integration blocks any change that
    alters this documented behavior. Releases are gated by measured accuracy,
    not by hope.
+
+9. **Semantic alias resolution (optional).** An embedding soft-normalizer can
+   sit in the cleaning pipeline to catch near-misses the alias map never
+   listed. Off by default; see [Semantic embedding layer](#semantic-embedding-layer)
+   below.
+
+---
+
+## Cleaning pipeline architecture
+
+Every controlled-vocabulary field (country, legal form, status, currency,
+unit) is normalized in a fixed order. Later stages only run when earlier ones
+miss. This way, documented aliases stay authoritative and the optional embedding
+layer never overrides a known mapping:
+
+```text
+raw value
+  → blank / sentinel?     → null
+  → exact controlled set? → keep
+  → deterministic alias?  → canonical   (conventions/*.yaml)
+  → embedding near-miss?  → canonical   (optional, USE_EMBEDDINGS=1)
+  → otherwise             → as-is       (grounding: flagged, not invented)
+```
+
+**Why this order.** Putting embeddings _after_ the alias map preserves the
+house standard: "germany" → `DE` always comes from the YAML, never from a
+similarity guess. Embeddings only help with novel paraphrases
+("Nederlands", "Federal Republic of Germany") that nobody thought to list.
+
+**Grounding guarantee.** Values below the per-field similarity threshold
+pass through unchanged. Regions and true unknowns must not be "helpfully"
+corrected: `Bavaria` stays `Bavaria`, `Atlantis` stays `Atlantis`, the typo
+`GmbbH` stays `GmbbH`. The adversarial suite pins these cases.
+
+**Labels stay honest.** Synthetic near-miss corruption runs only when
+`USE_EMBEDDINGS=1`, so `normalize_record()` can reverse it. Without the flag,
+training data never teaches the model to pass through a value that production
+would clean.
+
+---
+
+## Semantic embedding layer
+
+Activate with `USE_EMBEDDINGS=1` (off by default; no overhead when unset).
+
+```bash
+pip install sentence-transformers>=3.0
+make embed                          # download + cache the embedding model
+USE_EMBEDDINGS=1 make data          # near-miss examples get correct labels
+USE_EMBEDDINGS=1 make eval-gate     # include semantic_alias adversarial cases
+USE_EMBEDDINGS=1 make demo          # use embeddings at inference
+```
+
+Thresholds are per field under `embedding_thresholds:` in
+[conventions/default.yaml](conventions/default.yaml). The resolver compares
+the unknown string against **canonical codes and every alias key** (readable
+anchors). Matching bare ISO codes like `DE` alone is not enough: short codes
+carry almost no semantics for an embedding model.
+
+### Default embedding model
+
+| Model                                             | Size  | Role                                      | Notes                                                                                                                                  |
+| ------------------------------------------------- | ----- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | ~570M | **Default** in `core/embedding_lookup.py` | Multilingual (100+ languages), strong on short phrases, loads via `sentence-transformers`. ~2.2 GB download, ~1.2 GB RAM at inference. |
+
+`bge-m3` is the right default for this stack: it runs on CPU or Apple Silicon
+MPS, needs no NVIDIA GPU, and handles the German/English/French mix typical
+of European master data.
+
+### Alternative embedding models
+
+The cleaner only needs a text → dense vector encoder with cosine similarity.
+Any of the following can replace `BAAI/bge-m3` in
+`core/embedding_lookup.py` (one-line model id change); re-tune
+`embedding_thresholds:` and re-run `make embed` plus the adversarial suite
+before shipping.
+
+| Model                                                                                                                                             | Size          | Best when                                                                       | Caveats                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [nvidia/Nemotron-3-Embed-1B-NVFP4](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-NVFP4)                                                       | 1.14B (NVFP4) | NVIDIA GPU fleets; multilingual retrieval quality; commercial use (OpenMDW-1.1) | Quantized for **vLLM** on NVIDIA GPUs; not a drop-in for `sentence-transformers`. Prefer the BF16 sibling below on CPU/Mac, or wire vLLM as the encode backend. |
+| [nvidia/Nemotron-3-Embed-1B-BF16](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16)                                                         | 1.14B         | Same family, easier local swap via Transformers / Sentence Transformers         | Heavier than bge-m3; validate thresholds (esp. grounding: Bavaria must not become DE).                                                                          |
+| [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base)                                                             | ~278M         | Smaller multilingual footprint                                                  | May need the `query:` / `passage:` prefixes E5 expects; retune thresholds.                                                                                      |
+| [sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) | ~120M         | Fast CPU / laptop demos                                                         | Weaker on rare country synonyms; raise thresholds carefully.                                                                                                    |
+
+**Practical recommendation.** Keep **bge-m3** for Mac / air-gapped CPU boxes.
+Evaluate **Nemotron-3-Embed-1B** when you already run NVIDIA inference and want
+stronger multilingual retrieval. If you want to use the
+[NVFP4](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-NVFP4) checkpoint
+with vLLM in the data center, or the
+[BF16](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16) weights where
+`sentence-transformers` is enough. Always re-check the grounding cases after
+a swap.
 
 ---
 
@@ -178,11 +270,11 @@ make clean model data train fuse gguf serve eval
 
 Available presets:
 
-| Preset            | Base model                                                                                | Size | GGUF repo (baseline)                               | Quant   | ALIAS                |
-| ----------------- | ----------------------------------------------------------------------------------------- | ---- | -------------------------------------------------- | ------- | -------------------- |
-| `qwen3-0.6b`      | [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B)                                      | 0.6B | `Qwen/Qwen3-0.6B-GGUF`                             | `Q8_0`  | `qwen3-0.6b-cleaner` |
-| `qwen3.5-0.8b`    | [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B)                                  | 0.8B | `unsloth/Qwen3.5-0.8B-GGUF` (community; no official Qwen GGUF yet) | `Q8_0`  | `qwen3.5-0.8b-cleaner` |
-| `minicpm5-1b`     | [MiniCPM5-1B](https://huggingface.co/openbmb/MiniCPM5-1B)                                 | 1B   | `openbmb/MiniCPM5-1B-GGUF`                          | `Q4_K_M`| `minicpm5-1b-cleaner` |
+| Preset         | Base model                                                | Size | GGUF repo (baseline)                                               | Quant    | ALIAS                  |
+| -------------- | --------------------------------------------------------- | ---- | ------------------------------------------------------------------ | -------- | ---------------------- |
+| `qwen3-0.6b`   | [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B)      | 0.6B | `Qwen/Qwen3-0.6B-GGUF`                                             | `Q8_0`   | `qwen3-0.6b-cleaner`   |
+| `qwen3.5-0.8b` | [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B)  | 0.8B | `unsloth/Qwen3.5-0.8B-GGUF` (community; no official Qwen GGUF yet) | `Q8_0`   | `qwen3.5-0.8b-cleaner` |
+| `minicpm5-1b`  | [MiniCPM5-1B](https://huggingface.co/openbmb/MiniCPM5-1B) | 1B   | `openbmb/MiniCPM5-1B-GGUF`                                         | `Q4_K_M` | `minicpm5-1b-cleaner`  |
 
 Each preset sets four variables together. You can still override any individually:
 
@@ -200,9 +292,13 @@ Mistral (including Ministral and Nemo) are all supported today.)
 
 ```bash
 core/          the convention engine (loads the YAML spec, single source of truth)
+               core/embedding_lookup.py (optional) post-alias soft-normalizer
+               (default encoder: BAAI/bge-m3; swap-friendly)
 conventions/   editable client-specific convention specs (YAML)
+               embedding_thresholds: + alias maps feed the resolver
 synth/         synthetic messy->clean data generator (no real data, ever)
-eval/          eval harness + pinned adversarial suite (legal forms, formats, grounding)
+eval/          eval harness + pinned adversarial suite
+               (legal forms, formats, grounding, semantic_alias)
 runtime/       clean service: model -> validate -> algorithm safety net + audit + review
 deploy/        air-gapped container: Containerfile, entrypoint, security notes
 train/         MLX LoRA fine-tuning notes
@@ -223,6 +319,11 @@ make pin-model       # vendor the weights + pin their hash for the container
 make serve           # serve it locally...
 make eval            # ...and measure the before/after lift
 make review          # list records waiting for manual review
+
+# optional: embedding soft-normalizer (raises score on near-miss aliases)
+pip install sentence-transformers>=3.0
+make embed
+USE_EMBEDDINGS=1 make data eval-gate
 ```
 
 Client-specific convention: `make data CONVENTION=conventions/<client>.yaml`

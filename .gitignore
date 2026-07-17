@@ -8,3 +8,4 @@ __pycache__/
 .cursor/
 .cursor/hooks/state
 .DS_Store
+continual-learning.json

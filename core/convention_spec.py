@@ -27,6 +27,7 @@ import re
 from datetime import datetime
 
 import yaml
+from embedding_lookup import EmbeddingAliasResolver
 
 # --------------------------------------------------------------------------- #
 # 1. Controlled vocabularies + alias maps, loaded from the convention spec
@@ -52,6 +53,14 @@ UNIT_ALIASES = dict(_SPEC["unit_aliases"])
 STATUS = set(_SPEC["statuses"])
 STATUS_ALIASES = dict(_SPEC["status_aliases"])
 
+_RESOLVER = EmbeddingAliasResolver(
+    {"country": COUNTRIES, "legalForm": LEGAL_FORMS,
+     "currency": CURRENCIES, "unit": UNITS, "status": STATUS},
+    _SPEC.get("embedding_thresholds", {}),
+    {"country": COUNTRY_ALIASES, "legalForm": LEGAL_FORM_ALIASES,
+     "currency": CURRENCY_ALIASES, "unit": UNIT_ALIASES, "status": STATUS_ALIASES},
+)
+
 # Missing/unknown is encoded ONE way everywhere: JSON null. Never a sentinel.
 EMPTY_STRINGS = set(_SPEC["empty_strings"])
 NUMERIC_SENTINELS = set(_SPEC["numeric_sentinels"])
@@ -70,32 +79,44 @@ def clean_text(v):
         return None
     return " ".join(str(v).split())
 
-def _lookup(v, exact: set, alias: dict):
+def _lookup(v, exact: set, alias: dict, field_type: str = ""):
+    """exact → deterministic alias → optional embedding → as-is.
+
+    Embedding runs only after the alias map misses, so known mappings stay
+    authoritative and the soft layer only helps with novel variants.
+    """
     if _blank(v):
         return None
     s = " ".join(str(v).split())
     if s in exact:
         return s
-    return alias.get(s.lower(), s)   # unknown -> returned as-is (flagged by rules)
+    aliased = alias.get(s.lower())
+    if aliased is not None:
+        return aliased
+    if field_type:
+        candidate = _RESOLVER.resolve(field_type, s)
+        if candidate:
+            return candidate
+    return s   # unknown -> as-is (flagged by rules)
 
-def norm_legal_form(v): return _lookup(v, LEGAL_FORMS, LEGAL_FORM_ALIASES)
-def norm_status(v):     return _lookup(v, STATUS, STATUS_ALIASES)
+def norm_legal_form(v): return _lookup(v, LEGAL_FORMS, LEGAL_FORM_ALIASES, "legalForm")
+def norm_status(v):     return _lookup(v, STATUS, STATUS_ALIASES, "status")
 
 def norm_country(v):
-    r = _lookup(v, COUNTRIES, COUNTRY_ALIASES)
+    r = _lookup(v, COUNTRIES, COUNTRY_ALIASES, "country")
     return r.upper() if isinstance(r, str) and len(r) == 2 else r
 
 def norm_currency(v):
-    if _blank(v):
+    r = _lookup(v, CURRENCIES, CURRENCY_ALIASES, "currency")
+    if r is None:
         return None
-    s = str(v).strip()
-    return CURRENCY_ALIASES.get(s.lower(), s.upper())
+    return r if r in CURRENCIES else r.upper()
 
 def norm_unit(v):
-    if _blank(v):
+    r = _lookup(v, UNITS, UNIT_ALIASES, "unit")
+    if r is None:
         return None
-    s = str(v).strip()
-    return UNIT_ALIASES.get(s.lower(), s.upper())
+    return r if r in UNITS else r.upper()
 
 def norm_email(v):
     if _blank(v):

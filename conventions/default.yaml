@@ -23,8 +23,11 @@ legal_form_aliases:
   "gesellschaft mit beschränkter haftung": "GmbH"
   "mbh": "GmbH"
   "gmbh.": "GmbH"
+  "gmbh (gesellschaft mit beschränkter haftung)": "GmbH"
+  "gesellschaft mit beschränkter haftung (gmbh)": "GmbH"
   "aktiengesellschaft": "AG"
   "ag.": "AG"
+  "aktiengesellschaft (ag)": "AG"
   "unternehmergesellschaft": "UG"
   "ug (haftungsbeschränkt)": "UG"
   "limited": "Ltd"
@@ -39,15 +42,20 @@ country_aliases:
   "deutschland": "DE"
   "ger": "DE"
   "de": "DE"
+  "brd": "DE"
+  "bundesrepublik deutschland": "DE"
+  "tyskland": "DE"
   "austria": "AT"
   "österreich": "AT"
   "switzerland": "CH"
   "schweiz": "CH"
   "france": "FR"
   "frankreich": "FR"
+  "république française": "FR"
   "netherlands": "NL"
   "niederlande": "NL"
   "holland": "NL"
+  "nederland": "NL"
   "united kingdom": "GB"
   "great britain": "GB"
   "uk": "GB"
@@ -55,6 +63,7 @@ country_aliases:
   "united states": "US"
   "usa": "US"
   "u.s.a.": "US"
+  "united states of america": "US"
 
 currencies: ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "CZK", "HUF"]
 currency_aliases:
@@ -93,15 +102,33 @@ status_aliases:
   "a": "active"
   "released": "active"
   "freigegeben": "active"
+  "currently active": "active"
+  "still active": "active"
   "inaktiv": "inactive"
   "i": "inactive"
+  "not active": "inactive"
   "gesperrt": "blocked"
   "locked": "blocked"
   "deleted": "archived"
+  "soft-deleted": "archived"
 
 # Missing/unknown is encoded ONE way everywhere: JSON null. Never a sentinel.
 empty_strings: ["", " ", "-", "--", "n/a", "N/A", "na", "null", "NULL", "none", "?"]
 numeric_sentinels: [-1, -999, 9999]
+
+# Semantic alias resolution via bge-m3 embeddings (optional, off by default).
+# Applied only after the deterministic alias map misses. Embeddings are compared
+# against canonical codes AND every alias key (readable anchors) — bare ISO
+# codes alone are not semantic enough. Regions / true unknowns below threshold
+# pass through unchanged (grounding). Tuned so Bavaria/Atlantis/GmbbH stay put
+# while near-misses like "Nederlands" still resolve.
+# Set USE_EMBEDDINGS=1 to activate; the model downloads on first resolve().
+embedding_thresholds:
+  country: 0.75
+  legalForm: 0.70
+  currency: 0.90
+  unit: 0.85
+  status: 0.85
 
 # field name -> field type (the type picks the normalizer in convention_spec.py)
 fields:

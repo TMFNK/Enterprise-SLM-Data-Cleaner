@@ -8,13 +8,18 @@ convention spec that alters behavior fails loudly here: this is the regression
 gate. The emitted JSONL doubles as a model eval set with per-category scores.
 
 Categories:
-    legal_form  German/intl legal-form ambiguity (mbH vs GmbH, ag. vs AG...)
-    format      DE vs US dates and amounts, IBAN/VAT/phone/email mangling
-    grounding   plausible-but-unknown values that must pass through UNCHANGED;
-                a model that "helpfully corrects" them is hallucinating
+    legal_form      German/intl legal-form ambiguity (mbH vs GmbH, ag. vs AG...)
+    format          DE vs US dates and amounts, IBAN/VAT/phone/email mangling
+    grounding       plausible-but-unknown values that must pass through UNCHANGED;
+                    a model that "helpfully corrects" them is hallucinating
+                    (regions like Bavaria must NOT become a country code)
+    semantic_alias  near-miss variants resolved only by the optional embedding
+                    layer (not in the deterministic alias map); emitted only
+                    when USE_EMBEDDINGS=1 so the suite never lies
 
 Usage:
     python eval/adversarial.py --out data/adversarial.jsonl
+    USE_EMBEDDINGS=1 python eval/adversarial.py --out data/adversarial.jsonl
 """
 from __future__ import annotations
 import os
@@ -58,10 +63,17 @@ CASES = [
     ("format", "phone", "0049 (30) 12345", "+493012345"),
     ("format", "email", "Info@FIRMA.de", "info@firma.de"),
     ("format", "country", "  gErMaNy ", "DE"),
+    ("format", "country", "BRD", "DE"),
+    ("format", "country", "Nederland", "NL"),
+    ("format", "country", "Tyskland", "DE"),
     ("format", "currency", "euro", "EUR"),
     ("format", "status", "FREIGEGEBEN", "active"),
+    ("format", "status", "currently active", "active"),
+    ("format", "status", "not active", "inactive"),
     ("format", "baseUnit", "Stk", "PCE"),
     ("format", "name1", "  Muster   Handels  GmbH ", "Muster Handels GmbH"),
+    ("format", "legalForm", "GmbH (Gesellschaft mit beschränkter Haftung)", "GmbH"),
+    ("format", "legalForm", "Aktiengesellschaft (AG)", "AG"),
     # -- adversarial grounding: unknowns must survive untouched --------------
     ("grounding", "country", "Atlantis", "Atlantis"),
     ("grounding", "country", "Bavaria", "Bavaria"),        # region, NOT "DE"
@@ -72,12 +84,23 @@ CASES = [
     ("grounding", "recordType", "supplier", "supplier"),
     ("grounding", "validFrom", "99.99.2024", "99.99.2024"),
     ("grounding", "validFrom", "2024-13-45", "2024-13-45"),
+    # -- semantic alias: embedding near-misses (NOT in the deterministic map) --
+    ("semantic_alias", "country", "Nederlands", "NL"),
+    ("semantic_alias", "country", "Federal Republic of Germany", "DE"),
+    ("semantic_alias", "country", "French Republic", "FR"),
 ]
+
+
+_EMBEDDINGS_ACTIVE = os.environ.get("USE_EMBEDDINGS") == "1"
 
 
 def build_examples() -> list[dict]:
     rows = []
+    skipped = 0
     for category, field, messy_val, expected in CASES:
+        if category == "semantic_alias" and not _EMBEDDINGS_ACTIVE:
+            skipped += 1
+            continue  # omit — do not emit hollow identity targets
         messy = {field: messy_val}
         target, changes = normalize_record(messy)
         got = target[field]
@@ -92,14 +115,14 @@ def build_examples() -> list[dict]:
             {"role": "user", "content": json.dumps(messy, ensure_ascii=False)},
             {"role": "assistant", "content": json.dumps(target, ensure_ascii=False)},
         ]})
-    return rows
+    return rows, skipped
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="data/adversarial.jsonl")
     args = ap.parse_args()
-    rows = build_examples()
+    rows, skipped = build_examples()
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:
         for r in rows:
@@ -110,7 +133,9 @@ def main():
     print(f"adversarial suite: {len(rows)} pinned cases -> {args.out}")
     for cat, n in sorted(by_cat.items()):
         print(f"  {cat:11s}: {n}")
-    print("all pinned expectations verified against the algorithm.")
+    if skipped:
+        print(f"  (skipped {skipped} semantic_alias cases — set USE_EMBEDDINGS=1 to include)")
+    print("all emitted pinned expectations verified against the algorithm.")
 
 
 if __name__ == "__main__":
