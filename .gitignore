@@ -9,3 +9,16 @@ __pycache__/
 .cursor/hooks/state
 .DS_Store
 continual-learning.json
+
+# Non-essential LLM / AI coding tool files
+.clinerules/
+.windsurf/
+.aider/
+.continue/
+.codeium/
+.tabnine/
+.copilot/
+.idea/
+.vscode/
+*.code-workspace
+Instructions.md
