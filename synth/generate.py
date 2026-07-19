@@ -212,6 +212,15 @@ def main():
     ap.add_argument("--test-frac", type=float, default=0.1)
     args = ap.parse_args()
 
+    # Sacred fixtures live under fixtures/; this generator must not write there.
+    out_abs = os.path.abspath(args.out)
+    if f"{os.sep}fixtures{os.sep}" in (out_abs + os.sep) or out_abs.rstrip("/").endswith(
+            f"{os.sep}fixtures"):
+        sys.exit(
+            f"refusing to write synth output under fixtures/ ({args.out}). "
+            "Use --out data. Rebuild gold with: python3 scripts/build_fixtures.py"
+        )
+
     rng = random.Random(args.seed)
     rtypes = ["vendor", "customer", "material", "costCenter", "glAccount"]
     weights = [4, 3, 3, 1, 1]

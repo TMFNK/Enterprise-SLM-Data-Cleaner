@@ -14,14 +14,17 @@ pip install mlx-lm
 ## 1. Data
 
 `synth/generate.py` writes `data/train.jsonl`, `data/valid.jsonl`, `data/test.jsonl`
-in the chat format MLX expects (`{"messages": [...]}`).
+in the chat format MLX expects (`{"messages": [...]}`). It refuses to write under
+`fixtures/` (pinned gold is sacred).
 
 ```bash
 python synth/generate.py --n 2000 --out data --seed 0
+make check-balance    # also runs automatically before `make train`
 ```
 
 Start small and plot a learning curve (250 → 500 → 1k → 2k): data is free, so
-train on increasing slices and stop where eval flattens.
+train on increasing slices and stop where eval flattens. Score **pinned gold**
+(`fixtures/gold.jsonl`) for before/after reports, not only the generated test split.
 
 ## 2. LoRA fine-tune
 
