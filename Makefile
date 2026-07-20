@@ -72,11 +72,15 @@ CONVENTION ?= conventions/default.yaml
 export CONVENTION
 MODELS_DIR ?= models
 
+# Oracle scoring: override ORACLE_DATA / ORACLE_FLAGS as needed.
+ORACLE_DATA  ?= fixtures/gold.jsonl
+ORACLE_FLAGS ?=
+
 .DEFAULT_GOAL := help
-.PHONY: help list-models setup model data sanity adversarial embed eval-gate eval-adversarial \
+.PHONY: help list-models setup model data sanity oracle adversarial embed eval-gate eval-adversarial \
         baseline-serve baseline train fuse gguf \
         serve eval demo review pin-model verify-model all clean distclean \
-        privacy-check check-balance fixtures report-oracle eval-unseen eval-gold
+        privacy-check check-balance fixtures report-oracle
 
 help:  ## show this list of commands
 	@echo "Enterprise SLM Data Cleaner: commands (run them in this order):"
@@ -128,25 +132,21 @@ data:  ## STEP 5a: generate synthetic train/valid/test data (N, SEED) under data
 	$(PY) synth/generate.py --n $(N) --out $(DATA) --seed $(SEED)
 	@echo ">> Done. Next: make sanity (and make check-balance before train)"
 
-sanity:  ## STEP 5b: check the data is correct (should say 100%)
+oracle:  ## score ORACLE_DATA with normalize_record (rules peer)
+	$(PY) eval/evaluate.py --data $(ORACLE_DATA) --algorithm --label oracle $(ORACLE_FLAGS)
+
+sanity:  ## STEP 5b: oracle-score generated test (~100%)
 	@echo ">> Checking the held-out test split against the rule-based algorithm..."
-	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm
+	@$(MAKE) oracle ORACLE_DATA=$(DATA)/test.jsonl
 	@echo ">> If the numbers are ~100%, the data is good. Next: make baseline-serve"
 
 check-balance:  ## fail if train set lacks recordType / vocab coverage
 	$(PY) train/check_balance.py --data $(DATA)/train.jsonl
 
-eval-gold:  ## score pinned gold fixtures with the oracle
-	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --algorithm --label oracle \
-	  --min-score 100
-
-eval-unseen:  ## score unseen-noise holdout with the oracle
-	$(PY) eval/evaluate.py --data fixtures/holdout_unseen_noise.jsonl --algorithm --label oracle
-
 report-oracle:  ## write reports/oracle-gold.md from pinned gold
 	@mkdir -p reports
-	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --algorithm --label oracle \
-	  --report reports/oracle-gold.md --min-score 100
+	@$(MAKE) oracle ORACLE_DATA=fixtures/gold.jsonl \
+	  ORACLE_FLAGS='--report reports/oracle-gold.md --min-score 100'
 
 adversarial:  ## build the pinned adversarial eval suite (fails loudly on regressions)
 	$(PY) eval/adversarial.py --out $(DATA)/adversarial.jsonl
@@ -163,11 +163,12 @@ assert normalize_record({'country': 'Atlantis'})[0]['country'] == 'Atlantis'; \
 assert normalize_record({'legalForm': 'GmbbH'})[0]['legalForm'] == 'GmbbH'; \
 print('bge-m3 cached and ready')"
 
-eval-gate: privacy-check data adversarial eval-gold  ## CI gate: privacy + gold + synth + adversarial
+eval-gate: privacy-check data adversarial  ## CI gate: privacy + gold + synth + adversarial + unseen
+	@$(MAKE) oracle ORACLE_DATA=fixtures/gold.jsonl ORACLE_FLAGS='--min-score 100'
 	$(PY) core/convention_spec.py
-	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm --min-score 100
-	$(PY) eval/evaluate.py --data $(DATA)/adversarial.jsonl --algorithm --min-score 100
-	$(PY) eval/evaluate.py --data fixtures/holdout_unseen_noise.jsonl --algorithm --min-score 100
+	@$(MAKE) oracle ORACLE_DATA=$(DATA)/test.jsonl ORACLE_FLAGS='--min-score 100'
+	@$(MAKE) oracle ORACLE_DATA=$(DATA)/adversarial.jsonl ORACLE_FLAGS='--min-score 100'
+	@$(MAKE) oracle ORACLE_DATA=fixtures/holdout_unseen_noise.jsonl ORACLE_FLAGS='--min-score 100'
 	@echo ">> Eval gate passed."
 
 eval-adversarial:  ## score the served model on the adversarial suite (per category)
@@ -216,7 +217,8 @@ eval:  ## STEP 9b: score your fine-tuned model on pinned gold (compare to baseli
 	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --live --port $(PORT) --model-name $(ALIAS) \
 	  --label "fine-tuned SLM" --report reports/ft-gold.md
 	@echo ">> Also score adversarial + unseen locally if desired:"
-	@echo "   make eval-adversarial   and   make eval-unseen (oracle) / live with --data fixtures/holdout_unseen_noise.jsonl"
+	@echo "   make eval-adversarial"
+	@echo "   make oracle ORACLE_DATA=fixtures/holdout_unseen_noise.jsonl"
 
 demo:  ## STEP 10: clean one messy record with your model
 	$(PY) runtime/clean.py --live --port $(PORT) --model-name $(ALIAS)

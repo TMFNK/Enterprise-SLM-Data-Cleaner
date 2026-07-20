@@ -30,15 +30,8 @@ import argparse
 # make convention_spec (in core/) importable when run from anywhere
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
-import convention_spec as spec
 from convention_spec import normalize_record, rule_violations
-
-try:
-    import requests
-except ImportError:
-    requests = None
-
-MODEL_URL = "http://localhost:8080/v1/chat/completions"   # port set via --port
+from llama_client import call_model, require_server
 
 _SERVER_HINT = """
 Cannot reach the model server at http://localhost:{port}.
@@ -52,47 +45,13 @@ The first run also downloads the model, so give it a minute. Then re-run this.
 """
 
 
-def require_server(port: int):
-    """Fail early with a friendly message if the model server is not up."""
-    if requests is None:
-        sys.exit("The `requests` package is missing. Run: make setup")
-    models_url = MODEL_URL.rsplit("/", 2)[0] + "/models"  # .../v1/models
-    try:
-        requests.get(models_url, timeout=3)
-    except requests.exceptions.RequestException:
-        sys.exit(_SERVER_HINT.format(port=port))
-
-
-def _call_model(record: dict, model_name: str = "qwen3-0.6b-cleaner") -> dict | None:
-    if requests is None:
-        raise RuntimeError("`requests` not installed; --live needs it")
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": spec.system_prompt("mdm_record")},
-            {"role": "user", "content": json.dumps(record, ensure_ascii=False)},
-        ],
-        "temperature": 0,
-        # Grammar-constrain to the record schema so output is always valid JSON.
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": "mdm_record", "schema": spec.BLOCK_SCHEMAS["mdm_record"]},
-        },
-    }
-    r = requests.post(MODEL_URL, json=payload, timeout=120)
-    r.raise_for_status()
-    try:
-        return json.loads(r.json()["choices"][0]["message"]["content"])
-    except (json.JSONDecodeError, KeyError):
-        return None
-
-
 def clean_record(record: dict, use_model: bool = True,
                  min_confidence: float = 0.9,
-                 model_name: str = "qwen3-0.6b-cleaner") -> dict:
+                 model_name: str = "qwen3-0.6b-cleaner",
+                 port: int = 8080) -> dict:
     """Return {result, source, needs_review, violations}."""
     if use_model:
-        obj = _call_model(record, model_name=model_name)
+        obj = call_model(record, model_name=model_name, port=port)
         violations = rule_violations("mdm_record", obj) if obj else ["no valid JSON"]
         if obj and not violations:
             conf = obj.get("confidence", 1.0)
@@ -129,9 +88,8 @@ if __name__ == "__main__":
                     help="model confidence below this goes to manual review")
     ap.add_argument("--model-file", help="path to the served GGUF, to hash into the audit log")
     args = ap.parse_args()
-    MODEL_URL = f"http://localhost:{args.port}/v1/chat/completions"
     if args.live:
-        require_server(args.port)
+        require_server(args.port, _SERVER_HINT)
 
     log = AuditLog(args.audit_dir, model=args.model_name if args.live else "algorithm",
                    model_file=args.model_file)
@@ -142,7 +100,7 @@ if __name__ == "__main__":
         for rec in records:
             out = clean_record(rec, use_model=args.live,
                                min_confidence=args.min_confidence,
-                               model_name=args.model_name)
+                               model_name=args.model_name, port=args.port)
             log.record(rec, out)
             flagged += int(out["needs_review"])
             cleaned.append(out["result"])
@@ -165,7 +123,7 @@ if __name__ == "__main__":
             "validFrom": "01.03.2024", "amount": "1.234,56"}
 
     out = clean_record(demo, use_model=args.live, min_confidence=args.min_confidence,
-                       model_name=args.model_name)
+                       model_name=args.model_name, port=args.port)
     log.record(demo, out)
     print(f"source={out['source']} needs_review={out['needs_review']}")
     if out["violations"]:

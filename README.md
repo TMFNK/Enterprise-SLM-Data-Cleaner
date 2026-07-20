@@ -184,31 +184,9 @@ carry almost no semantics for an embedding model.
 
 `bge-m3` is the right default for this stack: it runs on CPU or Apple Silicon
 MPS, needs no NVIDIA GPU, and handles the German/English/French mix typical
-of European master data.
-
-### Alternative embedding models
-
-The cleaner only needs a text → dense vector encoder with cosine similarity.
-Any of the following can replace `BAAI/bge-m3` in
-`core/embedding_lookup.py` (one-line model id change); re-tune
-`embedding_thresholds:` and re-run `make embed` plus the adversarial suite
-before shipping.
-
-| Model                                                                                                                                             | Size          | Best when                                                                       | Caveats                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [nvidia/Nemotron-3-Embed-1B-NVFP4](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-NVFP4)                                                       | 1.14B (NVFP4) | NVIDIA GPU fleets; multilingual retrieval quality; commercial use (OpenMDW-1.1) | Quantized for **vLLM** on NVIDIA GPUs; not a drop-in for `sentence-transformers`. Prefer the BF16 sibling below on CPU/Mac, or wire vLLM as the encode backend. |
-| [nvidia/Nemotron-3-Embed-1B-BF16](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16)                                                         | 1.14B         | Same family, easier local swap via Transformers / Sentence Transformers         | Heavier than bge-m3; validate thresholds (esp. grounding: Bavaria must not become DE).                                                                          |
-| [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base)                                                             | ~278M         | Smaller multilingual footprint                                                  | May need the `query:` / `passage:` prefixes E5 expects; retune thresholds.                                                                                      |
-| [sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) | ~120M         | Fast CPU / laptop demos                                                         | Weaker on rare country synonyms; raise thresholds carefully.                                                                                                    |
-
-**Practical recommendation.** Keep **bge-m3** for Mac / air-gapped CPU boxes.
-Evaluate **Nemotron-3-Embed-1B** when you already run NVIDIA inference and want
-stronger multilingual retrieval. If you want to use the
-[NVFP4](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-NVFP4) checkpoint
-with vLLM in the data center, or the
-[BF16](https://huggingface.co/nvidia/Nemotron-3-Embed-1B-BF16) weights where
-`sentence-transformers` is enough. Always re-check the grounding cases after
-a swap.
+of European master data. To swap the encoder, change the model id in
+`core/embedding_lookup.py`, retune `embedding_thresholds:`, and re-run
+`make embed` plus the adversarial suite before shipping.
 
 ---
 
@@ -301,18 +279,18 @@ Mistral (including Ministral and Nemo) are all supported today.)
 ```bash
 core/          the convention engine (loads the YAML spec, single source of truth)
                core/embedding_lookup.py (optional) post-alias soft-normalizer
+               core/llama_client.py (shared live-model HTTP client)
                (default encoder: BAAI/bge-m3; swap-friendly)
 conventions/   editable client-specific convention specs (YAML) — product surface
                see conventions/README.md
 fixtures/      pinned gold + unseen-noise holdout (never written by synth/)
                fixtures/real/local/  gitignored real extracts
-baselines/     oracle CLI wrapper (normalize_record peer)
 synth/         synthetic messy->clean data generator → data/ only
 eval/          eval harness + pinned adversarial suite
                (legal forms, formats, grounding, semantic_alias)
 runtime/       clean service: model -> validate -> algorithm safety net + audit + review
                --min-confidence (default 0.9) → audit/review-queue.jsonl
-train/         MLX LoRA notes + check_balance.py (train gate)
+train/         check_balance.py (train gate); use `make train/fuse/gguf/serve`
 reports/       markdown eval reports (oracle · base · FT)
 docs/          PRIVACY.md and related
 deploy/        air-gapped container: Containerfile, entrypoint, security notes
@@ -325,9 +303,9 @@ Makefile       every pipeline step as `make <command>` (see `make help`)
 | Piece | Command / path | Role |
 |---|---|---|
 | Steward YAML | `conventions/` + [README](conventions/README.md) | Edit rules without code |
-| Sacred gold | `fixtures/gold.jsonl` | Hand-pinned; `make eval-gold` |
+| Sacred gold | `fixtures/gold.jsonl` | Hand-pinned; `make oracle` |
 | Unseen holdout | `fixtures/holdout_unseen_noise.jsonl` | OCR-ish family excluded from train |
-| Oracle peer | `make report-oracle` / `baselines/oracle.py` | Permanent rules row in reports |
+| Oracle peer | `make oracle` / `make report-oracle` | Permanent rules row in reports |
 | Balance gate | `make check-balance` (also prerequisite of `make train`) | Fail closed on thin coverage |
 | Privacy | `make privacy-check` / [docs/PRIVACY.md](docs/PRIVACY.md) | No real extracts in git |
 | Review queue | `runtime/clean.py --min-confidence 0.9` | Low confidence never silent-accept |
@@ -340,6 +318,7 @@ make fixtures          # rebuild gold + unseen (commit only when intentional)
 make report-oracle     # oracle on gold → reports/oracle-gold.md
 make data check-balance
 make eval-gate         # privacy + gold + synth test + adversarial + unseen
+# optional: make oracle ORACLE_DATA=fixtures/holdout_unseen_noise.jsonl
 ```
 
 ## Quick start (pipeline)

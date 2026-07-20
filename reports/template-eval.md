@@ -36,8 +36,8 @@ saved report.
 
 ```bash
 make report-oracle          # oracle on gold → reports/
-make eval-gate              # CI: synth test + adversarial @ 100%
-make eval-unseen            # oracle on unseen holdout
+make eval-gate              # CI: gold + synth + adversarial + unseen @ 100%
+make oracle ORACLE_DATA=fixtures/holdout_unseen_noise.jsonl
 make privacy-check
 make check-balance          # after make data
 ```

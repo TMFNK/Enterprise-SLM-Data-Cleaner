@@ -242,10 +242,6 @@ BLOCK_SCHEMAS = {
     },
 }
 
-# Field types whose cleaning is a reasoning/judgement problem (future v2/v3:
-# dedup, golden-record merge, nested-JSON reshape). Not triggered by v1.
-REASONING_BLOCKS = {"dedup", "reshape"}
-
 _CONTROLLED = {"country": COUNTRIES, "currency": CURRENCIES, "baseUnit": UNITS,
                "status": STATUS, "legalForm": LEGAL_FORMS, "recordType": RECORD_TYPES}
 

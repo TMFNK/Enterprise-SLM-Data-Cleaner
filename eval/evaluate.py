@@ -28,13 +28,7 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
 import convention_spec as spec
 from convention_spec import normalize_record
-
-try:
-    import requests
-except ImportError:
-    requests = None
-
-MODEL_URL = "http://localhost:8080/v1/chat/completions"
+from llama_client import call_model, require_server
 
 _SERVER_HINT = """
 Cannot reach the model server at http://localhost:{port}.
@@ -51,16 +45,6 @@ it a minute. Then re-run this command in your second terminal.
 """
 
 
-def require_server(port: int):
-    if requests is None:
-        sys.exit("The `requests` package is missing. Run: make setup")
-    models_url = MODEL_URL.rsplit("/", 2)[0] + "/models"
-    try:
-        requests.get(models_url, timeout=3)
-    except requests.exceptions.RequestException:
-        sys.exit(_SERVER_HINT.format(port=port))
-
-
 def _eq(a, b):
     if isinstance(a, float) or isinstance(b, float):
         try:
@@ -75,26 +59,6 @@ def predict_algorithm(messy: dict) -> dict:
     target["confidence"] = 1.0
     target["changes"] = changes
     return target
-
-
-def predict_live(messy: dict, model_name: str = "qwen3-0.6b-cleaner") -> dict | None:
-    if requests is None:
-        raise RuntimeError("`requests` needed for --live")
-    payload = {
-        "model": model_name, "temperature": 0,
-        "messages": [
-            {"role": "system", "content": spec.system_prompt("mdm_record")},
-            {"role": "user", "content": json.dumps(messy, ensure_ascii=False)},
-        ],
-        "response_format": {"type": "json_schema", "json_schema":
-                            {"name": "mdm_record", "schema": spec.BLOCK_SCHEMAS["mdm_record"]}},
-    }
-    r = requests.post(MODEL_URL, json=payload, timeout=120)
-    r.raise_for_status()
-    try:
-        return json.loads(r.json()["choices"][0]["message"]["content"])
-    except (json.JSONDecodeError, KeyError):
-        return None
 
 
 def _write_report(path: str, label: str, mode: str, data_path: str,
@@ -164,19 +128,16 @@ def main():
     ap.add_argument("--label", default=None,
                     help="row label for the report (oracle / base / fine-tuned)")
     args = ap.parse_args()
-    global MODEL_URL
-    MODEL_URL = f"http://localhost:{args.port}/v1/chat/completions"
     if args.live:
-        predict = lambda m: predict_live(m, model_name=args.model_name)
+        predict = lambda m: call_model(m, model_name=args.model_name, port=args.port)
         mode = "live model"
         default_label = "fine-tuned SLM"
+        require_server(args.port, _SERVER_HINT)
     else:
         predict = predict_algorithm
         mode = "algorithm (oracle)"
         default_label = "oracle"
     label = args.label or default_label
-    if args.live:
-        require_server(args.port)
 
     rows = [json.loads(l) for l in open(args.data, encoding="utf-8")]
     if args.limit:
