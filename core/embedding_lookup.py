@@ -6,7 +6,7 @@ exact-set and deterministic alias checks miss.  It embeds an unknown value
 and compares it against an *expanded* label set (canonical codes + every
 known alias key for that field).  Matching a readable alias label (e.g.
 "nederland") returns the canonical ("NL").  Comparing only against opaque
-ISO codes like "DE" does not work — short codes carry no semantics.
+ISO codes like "DE" does not work: short codes carry no semantics.
 
 If the best cosine similarity is below the field's threshold the value
 passes through unchanged, preserving the grounding guarantee (regions /
@@ -14,9 +14,9 @@ true unknowns stay as-is).
 
 Design
 ------
-* Single global model (BAAI/bge-m3) loaded lazily — no startup penalty.
+* Single global model (BAAI/bge-m3) loaded lazily; no startup penalty.
 * Pre-computes expanded label embeddings once per field type on first resolve().
-* Activated by env var USE_EMBEDDINGS=1 (off by default — zero overhead).
+* Activated by env var USE_EMBEDDINGS=1 (off by default for zero overhead).
 * Every failure mode (ImportError, model error, OOM) degrades gracefully to
   "no result" so the deterministic pathway is never blocked.
 """

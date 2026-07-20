@@ -31,8 +31,8 @@ docker build -f deploy/Containerfile -t enterprise-slm-cleaner .
 
 ## 3. Run
 
-**Batch cleaning, fully air-gapped** — the showcase mode. `--network none`
-removes the container's network stack entirely; records move only via the
+**Batch cleaning, fully air-gapped** (showcase mode). `--network none`
+removes the container's network stack entirely. The records move only via the
 mounted volume, and the audit log + review queue land there too:
 
 ```bash
@@ -43,7 +43,7 @@ docker run --rm --network none \
 # results: exchange/out.jsonl, audit trail: exchange/audit/
 ```
 
-**Long-running server** — for pod-internal use where *you* define the network
+**Long-running server**, for pod-internal use where _you_ define the network
 (e.g. a compose/K8s network shared only with your integration service):
 
 ```bash
@@ -52,8 +52,7 @@ docker run --rm -p 127.0.0.1:8080:8080 enterprise-slm-cleaner serve
 
 ## 4. What a security review can verify
 
-- `--network none`: no egress, no ingress, no DNS — enforced by the runtime,
-  not by promises in application code.
+- `--network none`: no egress, no ingress, no DNS. This is enforced by the runtime.
 - `models/MANIFEST.sha256` is in git history; the entrypoint fails closed on
   any weight mismatch (supply-chain check at every start).
 - No credentials, tokens or client data in the image: only code, convention
@@ -65,6 +64,6 @@ docker run --rm -p 127.0.0.1:8080:8080 enterprise-slm-cleaner serve
 
 The `pin-model` / `verify-model` targets and the entrypoint's manifest check
 are tested. The container image itself has not yet been built in this repo's
-CI or on a dev machine without Docker — treat the first build as a smoke test
+CI or on a dev machine without Docker, so we treat the first build as a smoke test
 (the base image's `llama-server` path is expected at `/app/llama-server`;
 override with `LLAMA_BIN` if your base image differs).

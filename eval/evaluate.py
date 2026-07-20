@@ -69,7 +69,7 @@ def _write_report(path: str, label: str, mode: str, data_path: str,
     score = 100.0 * field_hits / max(field_total, 1)
     validity = 100.0 * valid_json / max(n, 1)
     lines = [
-        f"# Eval report — {label}",
+        f"# Eval report - {label}",
         "",
         f"- ts: `{datetime.now(timezone.utc).isoformat(timespec='seconds')}`",
         f"- mode: `{mode}`",

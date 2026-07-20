@@ -1,7 +1,7 @@
 # =============================================================================
 # Containerfile: air-gapped serving image for the Enterprise SLM Data Cleaner.
 #
-# Posture: BUILD in a trusted, connected environment; RUN with no network at
+# BUILD in a trusted, connected environment; RUN with no network at
 # all (`--network none`). The image bundles llama.cpp's server, the cleaner
 # runtime, and the vendored model weights. Nothing is downloaded at runtime;
 # the entrypoint refuses to serve weights that don't match the pinned

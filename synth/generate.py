@@ -64,7 +64,7 @@ UNIT_VARIANTS = _invert(spec.UNIT_ALIASES)
 STATUS_VARIANTS = _invert(spec.STATUS_ALIASES)
 MISSING_TOKENS = ["", " ", "-", "n/a", "N/A", "null", "?"]
 
-# Near-miss variants NOT listed in the alias map — only the embedding layer
+# Near-miss variants NOT listed in the alias map, only the embedding layer
 # can reverse these. Applied only when USE_EMBEDDINGS=1 so labels stay correct.
 _EMBEDDINGS_ACTIVE = os.environ.get("USE_EMBEDDINGS") == "1"
 EMBEDDING_NEAR_MISSES = {
@@ -152,7 +152,7 @@ def corrupt_record(clean: dict, rng: random.Random) -> dict:
         m["baseUnit"] = rng.choice(UNIT_VARIANTS[m["baseUnit"]])
     if "status" in m and STATUS_VARIANTS.get(m["status"]) and maybe(0.7):
         m["status"] = _messy_case(rng, rng.choice(STATUS_VARIANTS[m["status"]]))
-    # embedding near-miss corruption — only when embeddings can reverse it
+    # embedding near-miss corruption, only when embeddings can reverse it
     if _EMBEDDINGS_ACTIVE and "country" in m and maybe(0.08):
         for messy, canon in EMBEDDING_NEAR_MISSES["country"]:
             if m["country"] == canon:

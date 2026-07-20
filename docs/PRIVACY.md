@@ -9,7 +9,7 @@ docs that land in git.
 1. **Training data is synthetic.** `synth/generate.py` invents names, IBANs,
    and VAT-shaped strings. Do not feed client extracts into `make data`.
 2. **Pinned gold may use invented identifiers.** `fixtures/gold.jsonl` is
-   synthetic; invented IBAN/VAT *shapes* are OK.
+   synthetic; invented IBAN/VAT _shapes_ are OK.
 3. **Real batches stay local.** Put them in `fixtures/real/local/` (gitignored).
    Summaries of failure modes may be committed; the rows themselves must not.
 4. **Air-gap delivery.** Production serving uses `deploy/` with `--network none`

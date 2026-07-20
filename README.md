@@ -121,7 +121,7 @@ Beratung und Umsetzung: [mbitai.com](https://www.mbitai.com).
     the same fixtures. Training refuses to start if the synthetic train set
     fails the coverage balance gate. Real extracts stay under
     `fixtures/real/local/` (gitignored); see [docs/PRIVACY.md](docs/PRIVACY.md).
-    Stewards edit [conventions/](conventions/README.md) only — no code changes.
+    Stewards edit [conventions/](conventions/README.md) only; no code changes.
 
 ---
 
@@ -281,7 +281,7 @@ core/          the convention engine (loads the YAML spec, single source of trut
                core/embedding_lookup.py (optional) post-alias soft-normalizer
                core/llama_client.py (shared live-model HTTP client)
                (default encoder: BAAI/bge-m3; swap-friendly)
-conventions/   editable client-specific convention specs (YAML) — product surface
+conventions/   editable client-specific convention specs (YAML), product surface
                see conventions/README.md
 fixtures/      pinned gold + unseen-noise holdout (never written by synth/)
                fixtures/real/local/  gitignored real extracts
@@ -300,16 +300,16 @@ Makefile       every pipeline step as `make <command>` (see `make help`)
 
 ## Eval hardening
 
-| Piece | Command / path | Role |
-|---|---|---|
-| Steward YAML | `conventions/` + [README](conventions/README.md) | Edit rules without code |
-| Sacred gold | `fixtures/gold.jsonl` | Hand-pinned; `make oracle` |
-| Unseen holdout | `fixtures/holdout_unseen_noise.jsonl` | OCR-ish family excluded from train |
-| Oracle peer | `make oracle` / `make report-oracle` | Permanent rules row in reports |
-| Balance gate | `make check-balance` (also prerequisite of `make train`) | Fail closed on thin coverage |
-| Privacy | `make privacy-check` / [docs/PRIVACY.md](docs/PRIVACY.md) | No real extracts in git |
-| Review queue | `runtime/clean.py --min-confidence 0.9` | Low confidence never silent-accept |
-| Real smoke | [fixtures/real/README.md](fixtures/real/README.md) | 20 local lines before production FT claims |
+| Piece          | Command / path                                            | Role                                       |
+| -------------- | --------------------------------------------------------- | ------------------------------------------ |
+| Steward YAML   | `conventions/` + [README](conventions/README.md)          | Edit rules without code                    |
+| Sacred gold    | `fixtures/gold.jsonl`                                     | Hand-pinned; `make oracle`                 |
+| Unseen holdout | `fixtures/holdout_unseen_noise.jsonl`                     | OCR-ish family excluded from train         |
+| Oracle peer    | `make oracle` / `make report-oracle`                      | Permanent rules row in reports             |
+| Balance gate   | `make check-balance` (also prerequisite of `make train`)  | Fail closed on thin coverage               |
+| Privacy        | `make privacy-check` / [docs/PRIVACY.md](docs/PRIVACY.md) | No real extracts in git                    |
+| Review queue   | `runtime/clean.py --min-confidence 0.9`                   | Low confidence never silent-accept         |
+| Real smoke     | [fixtures/real/README.md](fixtures/real/README.md)        | 20 local lines before production FT claims |
 
 Required report shape: [reports/template-eval.md](reports/template-eval.md).
 

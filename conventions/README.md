@@ -20,12 +20,12 @@ to customize house standards for a client.
 
 ## What lives here vs in code
 
-| In YAML (edit freely) | In `core/convention_spec.py` (code) |
-|---|---|
-| Controlled sets (countries, legal forms, …) | Parsers (dates, amounts, IBAN, phone) |
-| Alias maps (messy → canonical) | Field-type dispatch (`FIELD_REGISTRY`) |
-| Empty / sentinel encodings | Schema + `normalize_record()` |
-| Embedding thresholds | Embedding resolver wiring |
+| In YAML (edit freely)                       | In `core/convention_spec.py` (code)    |
+| ------------------------------------------- | -------------------------------------- |
+| Controlled sets (countries, legal forms, …) | Parsers (dates, amounts, IBAN, phone)  |
+| Alias maps (messy → canonical)              | Field-type dispatch (`FIELD_REGISTRY`) |
+| Empty / sentinel encodings                  | Schema + `normalize_record()`          |
+| Embedding thresholds                        | Embedding resolver wiring              |
 
 ## Rules of the road
 

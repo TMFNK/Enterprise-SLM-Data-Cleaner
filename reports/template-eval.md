@@ -14,19 +14,19 @@ saved report.
 
 ## Comparison table
 
-| System | Validity @clean | Field accuracy @clean | Field accuracy @adversarial | Field accuracy @unseen |
-|---|---|---|---|---|
-| oracle (`normalize_record`) | | | | |
-| base SLM | | | | |
-| fine-tuned SLM | | | | |
+| System                      | Validity @clean | Field accuracy @clean | Field accuracy @adversarial | Field accuracy @unseen |
+| --------------------------- | --------------- | --------------------- | --------------------------- | ---------------------- |
+| oracle (`normalize_record`) |                 |                       |                             |                        |
+| base SLM                    |                 |                       |                             |                        |
+| fine-tuned SLM              |                 |                       |                             |                        |
 
 ## Ops
 
-| Metric | Value |
-|---|---|
-| Review-queue rate (conf &lt; threshold) | |
-| `check_balance.py` | pass / fail |
-| `privacy-check` | pass / fail |
+| Metric                                  | Value       |
+| --------------------------------------- | ----------- |
+| Review-queue rate (conf &lt; threshold) |             |
+| `check_balance.py`                      | pass / fail |
+| `privacy-check`                         | pass / fail |
 
 ## Notes
 

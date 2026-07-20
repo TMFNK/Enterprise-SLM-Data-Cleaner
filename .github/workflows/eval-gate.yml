@@ -1,6 +1,6 @@
 # Eval gate: no change to the convention, core algorithm, or generator lands
 # if it breaks documented behavior. Layers:
-#   1. privacy-check — no real extracts committed under fixtures/real/
+#   1. privacy-check: no real extracts committed under fixtures/real/
 #   2. pinned gold fixtures must score 100% in oracle mode
 #   3. eval/adversarial.py has PINNED expected values; any regression fails
 #      the build at generation time with a named case
@@ -8,7 +8,7 @@
 #      100% field accuracy in algorithm mode
 #   5. train balance check on the generated train split
 # Model-quality gating (live eval vs. a served fine-tune) runs locally via
-# `make eval-adversarial` — CI has no GPU and the weights are not in git.
+# `make eval-adversarial`, CI has no GPU and the weights are not in git.
 name: eval-gate
 
 on:

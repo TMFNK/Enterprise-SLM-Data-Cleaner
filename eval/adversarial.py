@@ -18,7 +18,7 @@ Categories:
                     when USE_EMBEDDINGS=1 so the suite never lies
 
 Unseen holdout (separate file, excluded from training corruptors):
-    fixtures/holdout_unseen_noise.jsonl — OCR-ish / glue artifacts from
+    fixtures/holdout_unseen_noise.jsonl; OCR/glue artifacts from
     scripts/build_fixtures.py. Do not mix into data/train.jsonl.
 
 Usage:
@@ -104,7 +104,7 @@ def build_examples() -> list[dict]:
     for category, field, messy_val, expected in CASES:
         if category == "semantic_alias" and not _EMBEDDINGS_ACTIVE:
             skipped += 1
-            continue  # omit — do not emit hollow identity targets
+            continue  # omit, do not emit hollow identity targets
         messy = {field: messy_val}
         target, changes = normalize_record(messy)
         got = target[field]
@@ -138,7 +138,7 @@ def main():
     for cat, n in sorted(by_cat.items()):
         print(f"  {cat:11s}: {n}")
     if skipped:
-        print(f"  (skipped {skipped} semantic_alias cases — set USE_EMBEDDINGS=1 to include)")
+        print(f"  (skipped {skipped} semantic_alias cases; set USE_EMBEDDINGS=1 to include)")
     print("all emitted pinned expectations verified against the algorithm.")
 
 

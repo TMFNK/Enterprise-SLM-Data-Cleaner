@@ -17,8 +17,24 @@
 
 record_types: ["vendor", "customer", "material", "costCenter", "glAccount"]
 
-legal_forms: ["GmbH", "AG", "SE", "UG", "e.K.", "GmbH & Co. KG", "KG", "OHG",
-              "GbR", "Ltd", "Inc", "S.A.", "B.V.", "S.r.l.", "N.V."]
+legal_forms:
+  [
+    "GmbH",
+    "AG",
+    "SE",
+    "UG",
+    "e.K.",
+    "GmbH & Co. KG",
+    "KG",
+    "OHG",
+    "GbR",
+    "Ltd",
+    "Inc",
+    "S.A.",
+    "B.V.",
+    "S.r.l.",
+    "N.V.",
+  ]
 legal_form_aliases:
   "gesellschaft mit beschränkter haftung": "GmbH"
   "mbh": "GmbH"
@@ -35,8 +51,26 @@ legal_form_aliases:
   "incorporated": "Inc"
   "inc.": "Inc"
 
-countries: ["DE", "AT", "CH", "FR", "IT", "NL", "BE", "ES", "PL", "GB", "US",
-            "DK", "SE", "NO", "FI", "CZ", "HU"]
+countries:
+  [
+    "DE",
+    "AT",
+    "CH",
+    "FR",
+    "IT",
+    "NL",
+    "BE",
+    "ES",
+    "PL",
+    "GB",
+    "US",
+    "DK",
+    "SE",
+    "NO",
+    "FI",
+    "CZ",
+    "HU",
+  ]
 country_aliases:
   "germany": "DE"
   "deutschland": "DE"
@@ -65,7 +99,8 @@ country_aliases:
   "u.s.a.": "US"
   "united states of america": "US"
 
-currencies: ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "CZK", "HUF"]
+currencies:
+  ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "CZK", "HUF"]
 currency_aliases:
   "€": "EUR"
   "euro": "EUR"
@@ -113,12 +148,13 @@ status_aliases:
   "soft-deleted": "archived"
 
 # Missing/unknown is encoded ONE way everywhere: JSON null. Never a sentinel.
-empty_strings: ["", " ", "-", "--", "n/a", "N/A", "na", "null", "NULL", "none", "?"]
+empty_strings:
+  ["", " ", "-", "--", "n/a", "N/A", "na", "null", "NULL", "none", "?"]
 numeric_sentinels: [-1, -999, 9999]
 
 # Semantic alias resolution via bge-m3 embeddings (optional, off by default).
 # Applied only after the deterministic alias map misses. Embeddings are compared
-# against canonical codes AND every alias key (readable anchors) — bare ISO
+# against canonical codes AND every alias key (readable anchors); bare ISO
 # codes alone are not semantic enough. Regions / true unknowns below threshold
 # pass through unchanged (grounding). Tuned so Bavaria/Atlantis/GmbbH stay put
 # while near-misses like "Nederlands" still resolve.
