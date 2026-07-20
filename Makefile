@@ -75,7 +75,8 @@ MODELS_DIR ?= models
 .DEFAULT_GOAL := help
 .PHONY: help list-models setup model data sanity adversarial embed eval-gate eval-adversarial \
         baseline-serve baseline train fuse gguf \
-        serve eval demo review pin-model verify-model all clean distclean
+        serve eval demo review pin-model verify-model all clean distclean \
+        privacy-check check-balance fixtures report-oracle eval-unseen eval-gold
 
 help:  ## show this list of commands
 	@echo "Enterprise SLM Data Cleaner: commands (run them in this order):"
@@ -83,7 +84,7 @@ help:  ## show this list of commands
 	@echo "Model preset: $(MODEL_PRESET)  (run 'make list-models' for options)"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 list-models:  ## show available model presets
 	@echo "Available MODEL_PRESET values:"
@@ -95,6 +96,12 @@ list-models:  ## show available model presets
 	@echo "Usage:  make MODEL_PRESET=minicpm5-1b <command>"
 	@echo "Set it once:  export MODEL_PRESET=minicpm5-1b"
 	@echo "Switch preset:  make clean  (drops adapters/GGUF from the previous model)"
+
+privacy-check:  ## scan fixtures/real for committed extracts (see docs/PRIVACY.md)
+	$(PY) scripts/privacy_check.py
+
+fixtures:  ## rebuild pinned gold + unseen holdout (commit intentionally)
+	$(PY) scripts/build_fixtures.py
 
 # --- STEP 3: install the tools --------------------------------------------- #
 setup:  ## STEP 3: install Python libraries + the trainer (mlx-lm)
@@ -116,15 +123,30 @@ model:  ## STEP 4: download the base model from Hugging Face
 	@echo ">> Done. Next: make data"
 
 # --- STEP 5: make the training data ---------------------------------------- #
-data:  ## STEP 5a: generate synthetic train/valid/test data (N, SEED)
+data:  ## STEP 5a: generate synthetic train/valid/test data (N, SEED) under data/ only
 	@echo ">> Generating $(N) synthetic messy->clean examples..."
 	$(PY) synth/generate.py --n $(N) --out $(DATA) --seed $(SEED)
-	@echo ">> Done. Next: make sanity"
+	@echo ">> Done. Next: make sanity (and make check-balance before train)"
 
 sanity:  ## STEP 5b: check the data is correct (should say 100%)
 	@echo ">> Checking the held-out test split against the rule-based algorithm..."
 	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm
 	@echo ">> If the numbers are ~100%, the data is good. Next: make baseline-serve"
+
+check-balance:  ## fail if train set lacks recordType / vocab coverage
+	$(PY) train/check_balance.py --data $(DATA)/train.jsonl
+
+eval-gold:  ## score pinned gold fixtures with the oracle
+	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --algorithm --label oracle \
+	  --min-score 100
+
+eval-unseen:  ## score unseen-noise holdout with the oracle
+	$(PY) eval/evaluate.py --data fixtures/holdout_unseen_noise.jsonl --algorithm --label oracle
+
+report-oracle:  ## write reports/oracle-gold.md from pinned gold
+	@mkdir -p reports
+	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --algorithm --label oracle \
+	  --report reports/oracle-gold.md --min-score 100
 
 adversarial:  ## build the pinned adversarial eval suite (fails loudly on regressions)
 	$(PY) eval/adversarial.py --out $(DATA)/adversarial.jsonl
@@ -141,10 +163,11 @@ assert normalize_record({'country': 'Atlantis'})[0]['country'] == 'Atlantis'; \
 assert normalize_record({'legalForm': 'GmbbH'})[0]['legalForm'] == 'GmbbH'; \
 print('bge-m3 cached and ready')"
 
-eval-gate: data adversarial  ## CI gate: sanity + adversarial suites must score 100%
+eval-gate: privacy-check data adversarial eval-gold  ## CI gate: privacy + gold + synth + adversarial
 	$(PY) core/convention_spec.py
 	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --algorithm --min-score 100
 	$(PY) eval/evaluate.py --data $(DATA)/adversarial.jsonl --algorithm --min-score 100
+	$(PY) eval/evaluate.py --data fixtures/holdout_unseen_noise.jsonl --algorithm --min-score 100
 	@echo ">> Eval gate passed."
 
 eval-adversarial:  ## score the served model on the adversarial suite (per category)
@@ -158,10 +181,11 @@ baseline-serve:  ## STEP 6a: serve the STOCK model (downloads it fresh), keep ru
 
 baseline:  ## STEP 6b: score the stock model (run in the 2nd terminal)
 	@echo ">> Scoring the untrained model (this is your 'before' score)..."
-	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --live --port $(PORT) --model-name $(ALIAS)
+	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --live --port $(PORT) --model-name $(ALIAS) \
+	  --label "base SLM" --report reports/base-gold.md
 
 # --- STEP 7: fine-tune ------------------------------------------------------ #
-train:  ## STEP 7: fine-tune the model on your data (takes a while)
+train: check-balance  ## STEP 7: fine-tune (balance gate must pass first)
 	@echo ">> Fine-tuning $(MODEL) with LoRA for $(ITERS) steps..."
 	@echo ">> Stop the baseline-serve terminal first to free memory."
 	mlx_lm.lora --model $(MODEL) --train --data ./$(DATA) \
@@ -187,9 +211,12 @@ serve:  ## STEP 9a: serve YOUR fine-tuned model, keep running
 	@echo ">> Leave this running and open a SECOND terminal for 'make eval'."
 	llama-server -m $(QGGUF) --port $(PORT) --alias $(ALIAS)
 
-eval:  ## STEP 9b: score your fine-tuned model (compare to the baseline)
+eval:  ## STEP 9b: score your fine-tuned model on pinned gold (compare to baseline)
 	@echo ">> Scoring your fine-tuned model (this is your 'after' score)..."
-	$(PY) eval/evaluate.py --data $(DATA)/test.jsonl --live --port $(PORT) --model-name $(ALIAS)
+	$(PY) eval/evaluate.py --data fixtures/gold.jsonl --live --port $(PORT) --model-name $(ALIAS) \
+	  --label "fine-tuned SLM" --report reports/ft-gold.md
+	@echo ">> Also score adversarial + unseen locally if desired:"
+	@echo "   make eval-adversarial   and   make eval-unseen (oracle) / live with --data fixtures/holdout_unseen_noise.jsonl"
 
 demo:  ## STEP 10: clean one messy record with your model
 	$(PY) runtime/clean.py --live --port $(PORT) --model-name $(ALIAS)

@@ -17,6 +17,10 @@ Categories:
                     layer (not in the deterministic alias map); emitted only
                     when USE_EMBEDDINGS=1 so the suite never lies
 
+Unseen holdout (separate file, excluded from training corruptors):
+    fixtures/holdout_unseen_noise.jsonl — OCR-ish / glue artifacts from
+    scripts/build_fixtures.py. Do not mix into data/train.jsonl.
+
 Usage:
     python eval/adversarial.py --out data/adversarial.jsonl
     USE_EMBEDDINGS=1 python eval/adversarial.py --out data/adversarial.jsonl

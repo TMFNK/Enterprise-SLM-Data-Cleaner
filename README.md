@@ -108,12 +108,20 @@ Beratung und Umsetzung: [mbitai.com](https://www.mbitai.com).
    "corrected" to a country? is "mbH" recognized as GmbH? is a US date
    misread as a German one?). Continuous integration blocks any change that
    alters this documented behavior. Releases are gated by measured accuracy,
-   not by hope.
+   not by hope. Pinned **gold fixtures** (`fixtures/gold.jsonl`) are separate
+   from generated `data/test.jsonl` and are never overwritten by `make data`.
 
 9. **Semantic alias resolution (optional).** An embedding soft-normalizer can
    sit in the cleaning pipeline to catch near-misses the alias map never
    listed. Off by default; see [Semantic embedding layer](#semantic-embedding-layer)
    below.
+
+10. **Eval hardening (oracle peer, balance, privacy).** Every serious report
+    compares **oracle (`normalize_record`) · base SLM · fine-tuned SLM** on
+    the same fixtures. Training refuses to start if the synthetic train set
+    fails the coverage balance gate. Real extracts stay under
+    `fixtures/real/local/` (gitignored); see [docs/PRIVACY.md](docs/PRIVACY.md).
+    Stewards edit [conventions/](conventions/README.md) only — no code changes.
 
 ---
 
@@ -294,30 +302,60 @@ Mistral (including Ministral and Nemo) are all supported today.)
 core/          the convention engine (loads the YAML spec, single source of truth)
                core/embedding_lookup.py (optional) post-alias soft-normalizer
                (default encoder: BAAI/bge-m3; swap-friendly)
-conventions/   editable client-specific convention specs (YAML)
-               embedding_thresholds: + alias maps feed the resolver
-synth/         synthetic messy->clean data generator (no real data, ever)
+conventions/   editable client-specific convention specs (YAML) — product surface
+               see conventions/README.md
+fixtures/      pinned gold + unseen-noise holdout (never written by synth/)
+               fixtures/real/local/  gitignored real extracts
+baselines/     oracle CLI wrapper (normalize_record peer)
+synth/         synthetic messy->clean data generator → data/ only
 eval/          eval harness + pinned adversarial suite
                (legal forms, formats, grounding, semantic_alias)
 runtime/       clean service: model -> validate -> algorithm safety net + audit + review
+               --min-confidence (default 0.9) → audit/review-queue.jsonl
+train/         MLX LoRA notes + check_balance.py (train gate)
+reports/       markdown eval reports (oracle · base · FT)
+docs/          PRIVACY.md and related
 deploy/        air-gapped container: Containerfile, entrypoint, security notes
-train/         MLX LoRA fine-tuning notes
 .github/       CI eval gate: regressions cannot merge
 Makefile       every pipeline step as `make <command>` (see `make help`)
+```
+
+## Eval hardening
+
+| Piece | Command / path | Role |
+|---|---|---|
+| Steward YAML | `conventions/` + [README](conventions/README.md) | Edit rules without code |
+| Sacred gold | `fixtures/gold.jsonl` | Hand-pinned; `make eval-gold` |
+| Unseen holdout | `fixtures/holdout_unseen_noise.jsonl` | OCR-ish family excluded from train |
+| Oracle peer | `make report-oracle` / `baselines/oracle.py` | Permanent rules row in reports |
+| Balance gate | `make check-balance` (also prerequisite of `make train`) | Fail closed on thin coverage |
+| Privacy | `make privacy-check` / [docs/PRIVACY.md](docs/PRIVACY.md) | No real extracts in git |
+| Review queue | `runtime/clean.py --min-confidence 0.9` | Low confidence never silent-accept |
+| Real smoke | [fixtures/real/README.md](fixtures/real/README.md) | 20 local lines before production FT claims |
+
+Required report shape: [reports/template-eval.md](reports/template-eval.md).
+
+```bash
+make fixtures          # rebuild gold + unseen (commit only when intentional)
+make report-oracle     # oracle on gold → reports/oracle-gold.md
+make data check-balance
+make eval-gate         # privacy + gold + synth test + adversarial + unseen
 ```
 
 ## Quick start (pipeline)
 
 ```bash
 make setup           # install Python deps + mlx-lm
-make data            # generate synthetic train/valid/test data
-make sanity          # verify the data against the rule-based algorithm (~100%)
-make eval-gate       # regression gate: sanity + adversarial suites must be 100%
-make train           # LoRA fine-tune the base model (Apple Silicon / MLX)
+make fixtures        # ensure pinned gold + unseen holdout exist
+make data            # generate synthetic train/valid/test under data/
+make check-balance   # coverage gate (also runs before make train)
+make sanity          # verify generated test vs oracle (~100%)
+make eval-gate       # full regression gate
+make train           # LoRA fine-tune (blocked if balance fails)
 make fuse gguf       # package the trained model for serving
 make pin-model       # vendor the weights + pin their hash for the container
 make serve           # serve it locally...
-make eval            # ...and measure the before/after lift
+make eval            # score fine-tuned model on fixtures/gold.jsonl
 make review          # list records waiting for manual review
 
 # optional: embedding soft-normalizer (raises score on near-miss aliases)
